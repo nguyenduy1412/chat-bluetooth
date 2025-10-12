@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
     width:55,
     height:55,
     borderRadius: 30,
-    backgroundColor: colors.skyBlue,
+    backgroundColor: colors.skyBlueLight,
     alignSelf:'center'
     
   },

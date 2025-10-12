@@ -1,24 +1,23 @@
-
-import React, { useEffect, useState } from "react";
+import React, {useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   TouchableOpacity,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import BluetoothModule from "../../../assets/managers/BluetoothModule";
-import { requestPermissions } from "../../../utils/permission";
-import { navigate } from "../../../utils/navigationUtils";
-import { Box } from "../../../components/common/Layout/Box";
-import { Text } from "../../../components/common/Text/Text";
-
+} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import BluetoothModule from '../../../assets/managers/BluetoothModule';
+import {requestPermissions} from '../../../utils/permission';
+import {navigate} from '../../../utils/navigationUtils';
+import {Box} from '../../../components/common/Layout/Box';
+import {Text} from '../../../components/common/Text/Text';
+import {colors} from '../../../theme/colors';
 
 // Interface cho device
 interface BluetoothDevice {
   name: string;
   address: string;
-  bondState: "BONDED" | "BONDING" | "NONE" | "UNKNOWN";
+  bondState: 'BONDED' | 'BONDING' | 'NONE' | 'UNKNOWN';
 }
 
 interface ConnectedDevice {
@@ -26,18 +25,20 @@ interface ConnectedDevice {
   address: string;
 }
 const ListMessageScreen = () => {
-  const { top, bottom } = useSafeAreaInsets();
+  const {top, bottom} = useSafeAreaInsets();
   const [devices, setDevices] = useState<BluetoothDevice[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [isEnabled, setIsEnabled] = useState(false);
-  const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>([]);
+  const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>(
+    [],
+  );
 
   // ✅ Kiểm tra và bật Bluetooth
   const checkAndEnableBluetooth = async () => {
     try {
       const available = await BluetoothModule.isBluetoothAvailable();
       if (!available) {
-        Alert.alert("❌ Lỗi", "Thiết bị không hỗ trợ Bluetooth");
+        Alert.alert('❌ Lỗi', 'Thiết bị không hỗ trợ Bluetooth');
         return false;
       }
       const enabled = await BluetoothModule.isBluetoothEnabled();
@@ -57,12 +58,10 @@ const ListMessageScreen = () => {
 
       return true;
     } catch (error: any) {
-      console.error("Check Bluetooth error:", error);
+      console.error('Check Bluetooth error:', error);
       return false;
     }
   };
-
-
 
   // ✅ Quét thiết bị (chỉ app của bạn)
   const startDiscovery = async () => {
@@ -70,8 +69,8 @@ const ListMessageScreen = () => {
       const hasPermission = await requestPermissions();
       if (!hasPermission) {
         Alert.alert(
-          "⚠️ Quyền bị từ chối",
-          "Chưa được cấp quyền Bluetooth và Location"
+          '⚠️ Quyền bị từ chối',
+          'Chưa được cấp quyền Bluetooth và Location',
         );
         return;
       }
@@ -84,12 +83,11 @@ const ListMessageScreen = () => {
       setDiscovering(true);
       setDevices([]);
       const res = await BluetoothModule.startDiscovery();
-      console.log("====================================");
-      console.log("Discovery started:", res);
-      console.log("====================================");
+      console.log('====================================');
+      console.log('Discovery started:', res);
+      console.log('====================================');
     } catch (error: any) {
-      console.error("Discovery error:", error);
-      Alert.alert("❌ Lỗi quét", error.message || String(error));
+      console.error('Discovery error:', error);
       setDiscovering(false);
     }
   };
@@ -100,7 +98,7 @@ const ListMessageScreen = () => {
       await BluetoothModule.stopDiscovery();
       setDiscovering(false);
     } catch (error: any) {
-      console.error("Stop discovery error:", error);
+      console.error('Stop discovery error:', error);
     }
   };
 
@@ -109,16 +107,16 @@ const ListMessageScreen = () => {
     try {
       await BluetoothModule.connectToDevice(device.address);
     } catch (error: any) {
-      console.error("Connect error:", error);
+      console.error('Connect error:', error);
       Alert.alert(
-        "❌ Kết nối thất bại",
+        '❌ Kết nối thất bại',
         `Không thể kết nối với ${device.name}\n\n${
           error.message || String(error)
         }`,
         [
-          { text: "Thử lại", onPress: () => connectTo(device) },
-          { text: "Đóng", style: "cancel" },
-        ]
+          {text: 'Thử lại', onPress: () => connectTo(device)},
+          {text: 'Đóng', style: 'cancel'},
+        ],
       );
     }
   };
@@ -128,142 +126,150 @@ const ListMessageScreen = () => {
     try {
       const hasPermission = await requestPermissions();
       if (!hasPermission) {
-        Alert.alert("⚠️ Quyền bị từ chối", "Chưa được cấp quyền Bluetooth");
+        Alert.alert('⚠️ Quyền bị từ chối', 'Chưa được cấp quyền Bluetooth');
         return;
       }
 
       await BluetoothModule.startServer();
-      const address = await BluetoothModule.getBluetoothAddress();
-
-      Alert.alert(
-        "✅ Server đã khởi động",
-        `Thiết bị của bạn đang chờ kết nối.\n\n` +
-          `📍 MAC: ${address}\n\n` +
-          `💡 Thiết bị khác có thể quét và kết nối`,
-        [{ text: "OK" }]
-      );
     } catch (error: any) {
-      console.error("Start server error:", error);
-      Alert.alert("❌ Lỗi", error.message || String(error));
+      console.error('Start server error:', error);
+      Alert.alert('❌ Lỗi', error.message || String(error));
     }
   };
 
-  // ✅ Ngắt kết nối với một thiết bị
+  // ✅ Bật chế độ Discoverable (tự động đổi tên có prefix BLE)
+  const makeDeviceDiscoverable = async () => {
+    try {
+      const hasPermission = await requestPermissions();
+      if (!hasPermission) {
+        Alert.alert('⚠️ Quyền bị từ chối', 'Chưa được cấp quyền Bluetooth');
+        return;
+      }
+
+      const enabled = await checkAndEnableBluetooth();
+      if (!enabled) {
+        return;
+      }
+
+      // Bật discoverable trong 300 giây (5 phút)
+      const message = await BluetoothModule.makeDiscoverable(300);
+      console.log('✅ Discoverable:', message);
+      Alert.alert('✅ Thành công', message);
+    } catch (error: any) {
+      console.error('Make discoverable error:', error);
+      Alert.alert('❌ Lỗi', error.message || String(error));
+    }
+  };
+
   const disconnect = async (address: string) => {
     try {
       await BluetoothModule.disconnect(address);
     } catch (error: any) {
-      console.error("Disconnect error:", error);
+      console.error('Disconnect error:', error);
     }
   };
 
-  // ✅ Ngắt tất cả kết nối
   const disconnectAll = async () => {
     try {
       await BluetoothModule.disconnectAll();
       setConnectedDevices([]);
     } catch (error: any) {
-      console.error("Disconnect all error:", error);
+      console.error('Disconnect all error:', error);
     }
   };
 
-
-
   useEffect(() => {
-    // Listener: Tìm thấy thiết bị (chỉ app của bạn)
     const deviceFoundListener = BluetoothModule.addEventListener(
-      "onDeviceFound",
+      'onDeviceFound',
       (device: BluetoothDevice) => {
-        console.log("✅ Tìm thấy thiết bị app:", device);
-        setDevices((prev) => {
-          const exists = prev.find(
-            (d) => d.address === device.address || device.name === "Unknown"
-          );
+        console.log('✅ Tìm thấy thiết bị app:', device);
+        if (!device.name || device.name.toLowerCase() === 'unknown' || !device.name.startsWith('BLE')) {
+          return;
+        }
+        setDevices(prev => {
+          const exists = prev.find(d => d.address === device.address);
           if (exists) return prev;
           return [...prev, device];
         });
-      }
+      },
     );
 
     // Listener: Quét xong
     const discoveryFinishedListener = BluetoothModule.addEventListener(
-      "onDiscoveryFinished",
+      'onDiscoveryFinished',
       () => {
-        console.log("Quét xong");
+        console.log('Quét xong');
         setDiscovering(false);
-      }
+      },
     );
 
     // Listener: Kết nối thành công
     const connectedListener = BluetoothModule.addEventListener(
-      "onConnected",
-      (info: { deviceName: string; deviceAddress: string }) => {
-        console.log("Đã kết nối:", info);
-        setConnectedDevices((prev) => {
-          const exists = prev.find((d) => d.address === info.deviceAddress);
+      'onConnected',
+      (info: {deviceName: string; deviceAddress: string}) => {
+        console.log('Đã kết nối:', info);
+        setConnectedDevices(prev => {
+          const exists = prev.find(d => d.address === info.deviceAddress);
           if (exists) return prev;
           return [
             ...prev,
-            { name: info.deviceName, address: info.deviceAddress },
+            {name: info.deviceName, address: info.deviceAddress},
           ];
         });
-        navigate("ChatStack", {
-          screen: "Message"
+        navigate('ChatStack', {
+          screen: 'Message',
         });
-      }
+      },
     );
 
     // Listener: Ngắt kết nối
     const disconnectedListener = BluetoothModule.addEventListener(
-      "onDisconnected",
-      (info: { deviceAddress: string }) => {
-        console.log("Đã ngắt kết nối:", info);
-        setConnectedDevices((prev) =>
-          prev.filter((d) => d.address !== info.deviceAddress)
+      'onDisconnected',
+      (info: {deviceAddress: string}) => {
+        console.log('Đã ngắt kết nối:', info);
+        setConnectedDevices(prev =>
+          prev.filter(d => d.address !== info.deviceAddress),
         );
-      }
+      },
     );
 
     // Listener: Mất kết nối
     const connectionLostListener = BluetoothModule.addEventListener(
-      "onConnectionLost",
-      (info: { deviceAddress: string }) => {
-        console.log("Mất kết nối:", info);
-        setConnectedDevices((prev) =>
-          prev.filter((d) => d.address !== info.deviceAddress)
+      'onConnectionLost',
+      (info: {deviceAddress: string}) => {
+        console.log('Mất kết nối:', info);
+        setConnectedDevices(prev =>
+          prev.filter(d => d.address !== info.deviceAddress),
         );
-        Alert.alert("⚠️ Mất kết nối", "Đã mất kết nối với thiết bị");
-      }
+        Alert.alert('⚠️ Mất kết nối', 'Đã mất kết nối với thiết bị');
+      },
     );
 
-  
     // Listener: Kết nối thất bại
     const connectionFailedListener = BluetoothModule.addEventListener(
-      "onConnectionFailed",
-      (error: {
-        error: string;
-        deviceName?: string;
-        deviceAddress?: string;
-      }) => {
-        console.log("Kết nối thất bại:", error);
+      'onConnectionFailed',
+      (error: {error: string; deviceName?: string; deviceAddress?: string}) => {
+        console.log('Kết nối thất bại:', error);
 
         const title = error.deviceName
           ? `❌ Không thể kết nối với ${error.deviceName}`
-          : "❌ Kết nối thất bại";
+          : '❌ Kết nối thất bại';
 
         Alert.alert(title, error.error, [
           {
-            text: "Thử lại",
+            text: 'Thử lại',
             onPress: () => {
               if (error.deviceAddress) {
-                const device = devices.find((d) => d.address === error.deviceAddress);
+                const device = devices.find(
+                  d => d.address === error.deviceAddress,
+                );
                 if (device) connectTo(device);
               }
             },
           },
-          { text: "Đóng", style: "cancel" },
+          {text: 'Đóng', style: 'cancel'},
         ]);
-      }
+      },
     );
 
     return () => {
@@ -275,12 +281,51 @@ const ListMessageScreen = () => {
       connectionFailedListener.remove();
     };
   }, []);
+  const autoRename = async () => {
+  try {
+    let retry = 0;
+    let bluetoothName = await BluetoothModule.getBluetoothName();
+
+    // Nếu chưa có prefix BLE thì đặt lại
+    if (!bluetoothName.startsWith("BLE")) {
+      bluetoothName = "BLE" + bluetoothName;
+    }
+
+    console.log("🟡 Đang đổi tên:", bluetoothName);
+    await BluetoothModule.setBluetoothName(bluetoothName);
+
+    // 🔁 Lặp lại cho đến khi tên thực sự đổi
+    while (retry < 10) { // tránh lặp vô hạn
+      const currentName = await BluetoothModule.getBluetoothName();
+
+      if (currentName === bluetoothName) {
+        console.log("✅ Đổi tên Bluetooth thành công:", currentName);
+        return;
+      }
+
+      console.log("⏳ Chờ đổi tên... lần", retry + 1);
+      await new Promise((res) => setTimeout(res, 1000)); // đợi 1s rồi thử lại
+      retry++;
+    }
+
+    console.warn("⚠️ Đổi tên Bluetooth thất bại sau 10 lần thử");
+  } catch (err) {
+    console.error("❌ Lỗi khi đổi tên Bluetooth:", err);
+  }
+};
 
   // ✅ Init khi mount
   useEffect(() => {
     const init = async () => {
-      await requestPermissions();
+      const status = await requestPermissions();
       await checkAndEnableBluetooth();
+      if (status) {
+        startServer();
+        autoRename();
+        let bluetoothName = await BluetoothModule.getBluetoothName();
+        console.log('alo',bluetoothName);
+        
+      }
     };
 
     init();
@@ -292,48 +337,46 @@ const ListMessageScreen = () => {
   }, []);
 
   // Render device item
-  const renderDevice = ({ item }: { item: BluetoothDevice }) => {
+  const renderDevice = ({item}: {item: BluetoothDevice}) => {
     const isConnectedDevice = connectedDevices.some(
-      (d) => d.address === item.address
+      d => d.address === item.address,
     );
 
     return (
       <TouchableOpacity
         onPress={() => !isConnectedDevice && connectTo(item)}
-        disabled={isConnectedDevice}
-      >
+        disabled={isConnectedDevice}>
         <Box
           backgroundColor="white"
           p={16}
           mb={10}
           borderRadius={12}
           flexDirection="row"
-          alignItems="center"
-        >
+          alignItems="center">
           <Box flex={1}>
-            <Text fontSize={17} fontWeight="bold" color="#333" >
-              {item.name || "Unknown"} {isConnectedDevice && "✅"}
+            <Text fontSize={17} fontWeight="bold" color="#333">
+              {item.name || 'Unknown'} {isConnectedDevice && '✅'}
             </Text>
-            <Text fontSize={12} color="#999" >
+            <Text fontSize={12} color="#999">
               {item.address}
             </Text>
-            {item.bondState === "BONDED" && (
+            {item.bondState === 'BONDED' && (
               <Text fontSize={11} color="#007AFF">
                 🔗 Đã ghép nối
               </Text>
             )}
           </Box>
           <TouchableOpacity
-            onPress={() => isConnectedDevice ? disconnect(item.address) : connectTo(item)}
-          >
-            <Box 
-              backgroundColor={isConnectedDevice ? "#FF3B30" : "#007AFF"}
+            onPress={() =>
+              isConnectedDevice ? disconnect(item.address) : connectTo(item)
+            }>
+            <Box
+              backgroundColor={isConnectedDevice ? '#FF3B30' : '#007AFF'}
               py={8}
               px={16}
-              borderRadius={8}
-            >
+              borderRadius={8}>
               <Text color="white" fontWeight="bold">
-                {isConnectedDevice ? "Ngắt" : "Kết nối"}
+                {isConnectedDevice ? 'Ngắt' : 'Kết nối'}
               </Text>
             </Box>
           </TouchableOpacity>
@@ -343,15 +386,20 @@ const ListMessageScreen = () => {
   };
   // Giao diện kết nối
   return (
-    <Box flex={1} backgroundColor="#f5f5f5" px={16} pt={top} pb={bottom}>
+    <Box
+      flex={1}
+      backgroundColor={colors.background}
+      px={16}
+      pt={top}
+      pb={bottom}>
       <Text fontSize={26} fontWeight="bold" align="center" color="#333">
         💬 Chat qua Bluetooth
       </Text>
 
       {/* Trạng thái */}
       <Box backgroundColor="white" p={14} borderRadius={12} mb={16}>
-        <Text fontSize={14} color="#666" >
-          Bluetooth: {isEnabled ? "✅ Đã bật" : "❌ Chưa bật"}
+        <Text fontSize={14} color="#666">
+          Bluetooth: {isEnabled ? '✅ Đã bật' : '❌ Chưa bật'}
         </Text>
         {connectedDevices.length > 0 && (
           <Text fontSize={14} color="#666">
@@ -370,46 +418,61 @@ const ListMessageScreen = () => {
           <Box flex={1}>
             <TouchableOpacity
               onPress={discovering ? stopDiscovery : startDiscovery}
-              disabled={!isEnabled}
-            >
-              <Box 
-                backgroundColor={!isEnabled ? "#ccc" : "#007AFF"}
+              disabled={!isEnabled}>
+              <Box
+                backgroundColor={!isEnabled ? '#ccc' : '#007AFF'}
                 py={12}
                 borderRadius={8}
-                alignItems="center"
-              >
+                alignItems="center">
                 <Text color="white" fontWeight="bold">
-                  {discovering ? "⏸ Dừng" : "🔍 Quét"}
+                  {discovering ? '⏸ Dừng' : '🔍 Quét'}
                 </Text>
               </Box>
             </TouchableOpacity>
           </Box>
           <Box flex={1}>
-            <TouchableOpacity onPress={startServer} disabled={!isEnabled}>
-              <Box 
-                backgroundColor={!isEnabled ? "#ccc" : "#007AFF"}
+            <TouchableOpacity
+              onPress={makeDeviceDiscoverable}
+              disabled={!isEnabled}>
+              <Box
+                backgroundColor={!isEnabled ? '#ccc' : '#34C759'}
                 py={12}
                 borderRadius={8}
-                alignItems="center"
-              >
+                alignItems="center">
                 <Text color="white" fontWeight="bold">
-                  🌐 Chờ kết nối
+                  📡 Hiển thị
                 </Text>
               </Box>
             </TouchableOpacity>
           </Box>
         </Box>
 
+        <Box flexDirection="row" mb={8} gap={8}>
+          <Box flex={1}>
+            <TouchableOpacity onPress={startServer} disabled={!isEnabled}>
+              <Box
+                backgroundColor={!isEnabled ? '#ccc' : '#FF9500'}
+                py={12}
+                borderRadius={8}
+                alignItems="center">
+                <Text color="white" fontWeight="bold">
+                  🌐 Chờ kết nối
+                </Text>
+              </Box>
+            </TouchableOpacity>
+          </Box>
+          <Box flex={1} />
+        </Box>
+
         {connectedDevices.length > 0 && (
           <Box flexDirection="row" justifyContent="flex-end">
             <TouchableOpacity onPress={disconnectAll}>
-              <Box 
+              <Box
                 backgroundColor="#FF3B30"
                 py={12}
                 px={16}
                 borderRadius={8}
-                alignItems="center"
-              >
+                alignItems="center">
                 <Text color="white" fontWeight="bold">
                   ❌ Ngắt tất cả
                 </Text>
@@ -421,15 +484,14 @@ const ListMessageScreen = () => {
 
       {/* Indicator khi đang quét */}
       {discovering && (
-        <Box 
-          flexDirection="row" 
-          alignItems="center" 
+        <Box
+          flexDirection="row"
+          alignItems="center"
           justifyContent="center"
           p={14}
           backgroundColor="white"
           borderRadius={12}
-          mb={16}
-        >
+          mb={16}>
           <ActivityIndicator size="small" color="#007AFF" />
           <Text color="#666" fontSize={14}>
             Đang tìm thiết bị chạy app...
@@ -455,12 +517,12 @@ const ListMessageScreen = () => {
       {/* Thông báo khi chưa có thiết bị */}
       {!discovering && devices.length === 0 && (
         <Box flex={1} justifyContent="center" alignItems="center" py={40}>
-          <Text fontSize={64} >📱</Text>
-          <Text fontSize={18} fontWeight="bold" color="#666" >
+          <Text fontSize={64}>📱</Text>
+          <Text fontSize={18} fontWeight="bold" color="#666">
             Chưa tìm thấy thiết bị nào
           </Text>
-          <Text fontSize={14} color="#999" align="center" >
-            Nhấn "Quét" để tìm thiết bị{"\n"}
+          <Text fontSize={14} color="#999" align="center">
+            Nhấn "Quét" để tìm thiết bị{'\n'}
             hoặc "Chờ kết nối" để người khác kết nối đến
           </Text>
         </Box>

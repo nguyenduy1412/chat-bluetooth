@@ -99,5 +99,6 @@ textSecondary:'#808080',
     error:'red',
     primary:'#1E90FF',
     divider:'#E6E6E6',
-    limeGreen:'#63B8FF'
+    limeGreen:'#63B8FF',
+    background:'#F4F4F4',
 };

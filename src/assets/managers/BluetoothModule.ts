@@ -152,6 +152,29 @@ class BluetoothModuleWrapper {
     return BluetoothModule.getBluetoothAddress();
   }
 
+  /**
+   * Bật chế độ Discoverable (tự động đổi tên có prefix BLE nếu chưa có)
+   * @param duration - Thời gian discoverable (giây), tối đa 3600
+   */
+  async makeDiscoverable(duration: number = 300): Promise<string> {
+    return BluetoothModule.makeDiscoverable(duration);
+  }
+
+  /**
+   * Kiểm tra thiết bị có đang ở chế độ Discoverable không
+   */
+  async isDiscoverable(): Promise<boolean> {
+    return BluetoothModule.isDiscoverable();
+  }
+
+  /**
+   * Lấy trạng thái scan mode hiện tại
+   * @returns Object chứa mode, deviceName, deviceAddress
+   */
+  async getScanMode(): Promise<{mode: string; deviceName: string; deviceAddress: string}> {
+    return BluetoothModule.getScanMode();
+  }
+
   // ==================== QUÉT THIẾT BỊ ====================
 
   /**

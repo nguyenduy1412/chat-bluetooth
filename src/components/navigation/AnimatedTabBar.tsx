@@ -7,13 +7,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { Box } from "../common/Layout/Box";
 import { TabBarComponent } from "./TabBarComponent";
+import { colors } from "../../theme/colors";
 
 const AnimatedSvg = Animated.createAnimatedComponent(Svg);
 
 export const AnimatedTabBar = ({ state: { index: activeIndex, routes }, navigation, descriptors } : BottomTabBarProps) => {
   const { bottom } = useSafeAreaInsets();
-  const { colors } = useTheme();
-
   // get information about the components position on the screen -----
 
   const reducer = (state: any, action: { x: number, index: number }) => {
@@ -48,9 +47,9 @@ export const AnimatedTabBar = ({ state: { index: activeIndex, routes }, navigati
       transform: [{ translateX: withTiming(xOffset.value, { duration: 250 }) }],
     }
   })
-  console.log('bottom,',bottom)
+
   return (
-    <Box style={{ paddingBottom: 34, backgroundColor: 'red' }} >
+    <Box style={{ paddingBottom: 34, backgroundColor: colors.white }} >
       <AnimatedSvg
         width={110}
         height={60}
@@ -58,7 +57,7 @@ export const AnimatedTabBar = ({ state: { index: activeIndex, routes }, navigati
         style={[styles.activeBackground, animatedStyles]}
       >
         <Path
-          fill="white"
+          fill={colors.background}
           d="M20 0H0c11.046 0 20 8.953 20 20v5c0 19.33 15.67 35 35 35s35-15.67 35-35v-5c0-11.045 8.954-20 20-20H20z"
         />
       </AnimatedSvg>

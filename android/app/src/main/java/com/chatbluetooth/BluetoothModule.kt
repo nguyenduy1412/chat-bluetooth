@@ -87,7 +87,7 @@ class BluetoothModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  /** Đổi tên Bluetooth */
+  /** Đổi tên Bluetooth (tự động thêm prefix BLE nếu chưa có) */
   @ReactMethod
   fun setBluetoothName(newName: String, promise: Promise) {
     try {
@@ -101,9 +101,17 @@ class BluetoothModule(reactContext: ReactApplicationContext) :
         return
       }
 
-      val success = adapter!!.setName(newName)
+      // Tự động thêm prefix "BLE" nếu chưa có
+      val finalName = if (newName.startsWith("BLE", ignoreCase = true)) {
+        newName
+      } else {
+        "BLE$newName"
+      }
+
+      val success = adapter!!.setName(finalName)
       if (success) {
-        promise.resolve("Đã đổi tên thành: $newName")
+        Log.d(TAG, "✅ Đã đổi tên thành: $finalName")
+        promise.resolve("Đã đổi tên thành: $finalName")
       } else {
         promise.reject("FAILED", "Đổi tên Bluetooth thất bại")
       }
@@ -148,6 +156,126 @@ class BluetoothModule(reactContext: ReactApplicationContext) :
         return
       }
       promise.resolve(adapter!!.address ?: "Unknown")
+    } catch (e: Exception) {
+      promise.reject("ERROR", e.message)
+    }
+  }
+
+  /** Bật chế độ Discoverable (có thể phát hiện được) - Tự động đổi tên có prefix BLE */
+  @ReactMethod
+  fun makeDiscoverable(duration: Int, promise: Promise) {
+    try {
+      if (adapter == null) {
+        promise.reject("NO_ADAPTER", "Thiết bị không hỗ trợ Bluetooth")
+        return
+      }
+
+      if (!adapter!!.isEnabled) {
+        promise.reject("NOT_ENABLED", "Bluetooth chưa được bật")
+        return
+      }
+
+      // Bước 1: Kiểm tra và đổi tên thiết bị nếu cần
+      val currentName = adapter!!.name ?: "Device"
+      Log.d(TAG, "📱 Current device name: $currentName")
+      
+      if (!currentName.startsWith("BLE", ignoreCase = true)) {
+        val newName = "BLE$currentName"
+        Log.d(TAG, "🔄 Renaming device to: $newName")
+        
+        val renameSuccess = adapter!!.setName(newName)
+        if (!renameSuccess) {
+          Log.w(TAG, "⚠️ Failed to rename device, continuing anyway...")
+        } else {
+          // Đợi một chút để tên được cập nhật
+          Thread.sleep(500)
+          
+          // Verify tên đã đổi
+          val verifiedName = adapter!!.name
+          Log.d(TAG, "✅ Verified new name: $verifiedName")
+        }
+      } else {
+        Log.d(TAG, "✅ Device name already has BLE prefix")
+      }
+
+      // Bước 2: Kiểm tra xem đã ở chế độ discoverable chưa
+      val scanMode = adapter!!.scanMode
+      if (scanMode == BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE) {
+        promise.resolve("Thiết bị đã ở chế độ discoverable với tên: ${adapter!!.name}")
+        return
+      }
+
+      // Bước 3: Bật chế độ discoverable
+      val discoverableIntent = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE)
+      // duration: thời gian discoverable (giây), tối đa 3600 giây (1 giờ)
+      val validDuration = minOf(duration, 3600)
+      discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, validDuration)
+      discoverableIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      
+      reactApplicationContext.startActivity(discoverableIntent)
+      
+      Log.d(TAG, "✅ Requested discoverable mode for $validDuration seconds with name: ${adapter!!.name}")
+      promise.resolve("Đã yêu cầu bật chế độ discoverable trong $validDuration giây với tên: ${adapter!!.name}")
+      
+    } catch (e: Exception) {
+      Log.e(TAG, "Make discoverable error:", e)
+      promise.reject("ERROR", e.message)
+    }
+  }
+
+  /** Kiểm tra trạng thái Discoverable */
+  @ReactMethod
+  fun isDiscoverable(promise: Promise) {
+    try {
+      if (adapter == null) {
+        promise.reject("NO_ADAPTER", "Thiết bị không hỗ trợ Bluetooth")
+        return
+      }
+
+      if (!adapter!!.isEnabled) {
+        promise.reject("NOT_ENABLED", "Bluetooth chưa được bật")
+        return
+      }
+
+      val scanMode = adapter!!.scanMode
+      val isDiscoverable = scanMode == BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE
+      
+      promise.resolve(isDiscoverable)
+      
+    } catch (e: Exception) {
+      promise.reject("ERROR", e.message)
+    }
+  }
+
+  /** Lấy trạng thái scan mode */
+  @ReactMethod
+  fun getScanMode(promise: Promise) {
+    try {
+      if (adapter == null) {
+        promise.reject("NO_ADAPTER", "Thiết bị không hỗ trợ Bluetooth")
+        return
+      }
+
+      if (!adapter!!.isEnabled) {
+        promise.reject("NOT_ENABLED", "Bluetooth chưa được bật")
+        return
+      }
+
+      val scanMode = adapter!!.scanMode
+      val mode = when (scanMode) {
+        BluetoothAdapter.SCAN_MODE_NONE -> "NONE" // Bluetooth tắt
+        BluetoothAdapter.SCAN_MODE_CONNECTABLE -> "CONNECTABLE" // Có thể kết nối nhưng không discoverable
+        BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE -> "DISCOVERABLE" // Có thể phát hiện và kết nối
+        else -> "UNKNOWN"
+      }
+      
+      val result = Arguments.createMap()
+      result.putString("mode", mode)
+      result.putString("deviceName", adapter!!.name ?: "Unknown")
+      result.putString("deviceAddress", adapter!!.address ?: "Unknown")
+      
+      promise.resolve(result)
+      
     } catch (e: Exception) {
       promise.reject("ERROR", e.message)
     }
