@@ -10,7 +10,7 @@ import React from 'react';
 import type {PropsWithChildren} from 'react';
 import {ScrollView, StatusBar, Text, useColorScheme, View} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
-import {KeyboardProvider} from 'react-native-keyboard-controller';
+
 import RootNavigation from './src/components/navigation/RootNavigation';
 import initI18n from './src/i18n/config';
 

@@ -1,32 +1,20 @@
-import {
-  StyleSheet,
-  View,
-  Alert,
-  ActivityIndicator,
-  TouchableOpacity,
-  Text,
-  Platform,
-} from "react-native";
-import React, { useCallback, useEffect, useState, useRef } from "react";
-import {
-  GiftedChat,
-  IMessage,
-  Send,
-  Bubble,
-  InputToolbar,
-  Actions,
-  MessageImage,
-  MessageImageProps,
-} from "react-native-gifted-chat";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import BluetoothModule from "../../../assets/managers/BluetoothModule";
-import { Message } from "../../../types/types";
-import { launchImageLibrary } from "react-native-image-picker";
-import ImageResizer from "react-native-image-resizer";
-import RNFS from "react-native-fs";
-import { requestPermissions } from "../../../utils/permission";
-import Icon from "react-native-vector-icons/MaterialIcons";
-import { RenderMessageImage } from "../../../features/chat/components/RenderMessageImage";
+import {StyleSheet, Alert, ActivityIndicator, StatusBar} from 'react-native';
+import React, {useCallback, useEffect, useState, useRef} from 'react';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import BluetoothModule from '../../../assets/managers/BluetoothModule';
+import {Message} from '../../../types/types';
+import {launchImageLibrary} from 'react-native-image-picker';
+import ImageResizer from 'react-native-image-resizer';
+import RNFS from 'react-native-fs';
+import {requestPermissions} from '../../../utils/permission';
+import {CustomChatView} from '../../../features/chat/components/CustomChatView';
+import {CustomMessage} from '../../../features/chat/types';
+import {getSizeImage} from '../../../utils/getSizeImage';
+import {Box} from '../../../components/common/Layout/Box';
+import {ArrowLeft, BackpackIcon} from 'lucide-react-native';
+import {colors} from '../../../theme/colors';
+import {Text} from '../../../components/common/Text/Text';
+import { goBack, navigate } from '../../../utils/navigationUtils';
 
 interface BluetoothDevice {
   name: string;
@@ -35,16 +23,15 @@ interface BluetoothDevice {
 }
 
 const MessageScreen = () => {
-  const [messages, setMessages] = useState<IMessage[]>([]);
-  const [bluetoothName, setBluetoothName] = useState<string>("");
-  const [bluetoothAddress, setBluetoothAddress] = useState<string>("");
+  const [messages, setMessages] = useState<CustomMessage[]>([]);
+  const [bluetoothName, setBluetoothName] = useState<string>('');
+  const [bluetoothAddress, setBluetoothAddress] = useState<string>('');
   const [connectedDevices, setConnectedDevices] = useState<BluetoothDevice[]>(
-    []
+    [],
   );
   const [isLoading, setIsLoading] = useState(false);
   const insets = useSafeAreaInsets();
 
-  // Lưu trữ các chunks ảnh đang nhận
   const imageChunksRef = useRef<{
     [key: string]: {
       chunks: string[];
@@ -74,48 +61,51 @@ const MessageScreen = () => {
 
       // Lấy danh sách thiết bị đã kết nối (trả về string[] là addresses)
       const deviceAddresses = await BluetoothModule.getConnectedDevices();
-      const devices: BluetoothDevice[] = deviceAddresses.map((addr) => ({
-        name: "Connected Device",
+      const devices: BluetoothDevice[] = deviceAddresses.map(addr => ({
+        name: 'Connected Device',
         address: addr,
         paired: true,
       }));
       setConnectedDevices(devices);
 
-      console.log("✅ Bluetooth initialized:", name, address);
+      console.log('✅ Bluetooth initialized:', name, address);
     } catch (error) {
-      console.error("❌ Init Bluetooth error:", error);
+      console.error('❌ Init Bluetooth error:', error);
     }
   };
 
   const setupBluetoothListeners = () => {
     // Lắng nghe tin nhắn đến
-    BluetoothModule.addEventListener("onMessageReceived", handleMessageReceived);
+    BluetoothModule.addEventListener(
+      'onMessageReceived',
+      handleMessageReceived,
+    );
 
     // Lắng nghe kết nối mới
-    BluetoothModule.addEventListener("onConnected", (info) => {
+    BluetoothModule.addEventListener('onConnected', info => {
       const device: BluetoothDevice = {
         name: info.deviceName,
         address: info.deviceAddress,
         paired: true,
       };
-      setConnectedDevices((prev) => [...prev, device]);
+      setConnectedDevices(prev => [...prev, device]);
       addSystemMessage(`${info.deviceName} đã kết nối`);
     });
 
     // Lắng nghe ngắt kết nối
-    BluetoothModule.addEventListener("onDisconnected", (info) => {
-      setConnectedDevices((prev) =>
-        prev.filter((d) => d.address !== info.deviceAddress)
+    BluetoothModule.addEventListener('onDisconnected', info => {
+      setConnectedDevices(prev =>
+        prev.filter(d => d.address !== info.deviceAddress),
       );
       addSystemMessage(`Đã ngắt kết nối`);
     });
 
     // Lắng nghe nhận ảnh
-    BluetoothModule.addEventListener("onImageReceived", (data) => {
-      console.log("📸 Image received:", data.filePath);
+    BluetoothModule.addEventListener('onImageReceived', data => {
+      console.log('📸 Image received:', data.filePath);
       addMessage({
         _id: `img_${Date.now()}`,
-        text: "",
+        text: '',
         createdAt: new Date(),
         user: {
           _id: data.deviceAddress,
@@ -127,16 +117,16 @@ const MessageScreen = () => {
   };
 
   const handleMessageReceived = (data: any) => {
-    const { message, senderName, senderAddress } = data;
+    const {message, senderName, senderAddress} = data;
 
-    console.log("📩 Received:", message);
+    console.log('📩 Received:', message);
 
     // Xử lý tin nhắn ảnh
-    if (message.startsWith("IMG_START|")) {
+    if (message.startsWith('IMG_START|')) {
       handleImageStart(message, senderName, senderAddress);
-    } else if (message.startsWith("IMG_CHUNK|")) {
+    } else if (message.startsWith('IMG_CHUNK|')) {
       handleImageChunk(message, senderName, senderAddress);
-    } else if (message.startsWith("IMG_END|")) {
+    } else if (message.startsWith('IMG_END|')) {
       handleImageEnd(message, senderName, senderAddress);
     } else {
       // Tin nhắn text thông thường
@@ -156,9 +146,9 @@ const MessageScreen = () => {
   const handleImageStart = (
     message: string,
     senderName: string,
-    senderAddress: string
+    senderAddress: string,
   ) => {
-    const parts = message.split("|");
+    const parts = message.split('|');
     const messageId = parts[1];
     const totalChunks = parseInt(parts[2]);
     const timestamp = parseInt(parts[3]);
@@ -167,7 +157,7 @@ const MessageScreen = () => {
 
     // Khởi tạo storage cho ảnh
     imageChunksRef.current[messageId] = {
-      chunks: new Array(totalChunks).fill(""),
+      chunks: new Array(totalChunks).fill(''),
       totalChunks,
       receivedChunks: 0,
       timestamp,
@@ -178,7 +168,7 @@ const MessageScreen = () => {
     // Thêm message placeholder
     addMessage({
       _id: messageId,
-      text: "📷 Đang nhận ảnh...",
+      text: '📷 Đang nhận ảnh...',
       createdAt: new Date(timestamp),
       user: {
         _id: senderAddress,
@@ -190,16 +180,16 @@ const MessageScreen = () => {
   const handleImageChunk = (
     message: string,
     senderName: string,
-    senderAddress: string
+    senderAddress: string,
   ) => {
-    const parts = message.split("|");
+    const parts = message.split('|');
     const messageId = parts[1];
     const chunkIndex = parseInt(parts[2]);
     const chunkData = parts[3];
 
     const imageData = imageChunksRef.current[messageId];
     if (!imageData) {
-      console.warn("⚠️ Received chunk for unknown image:", messageId);
+      console.warn('⚠️ Received chunk for unknown image:', messageId);
       return;
     }
 
@@ -208,67 +198,69 @@ const MessageScreen = () => {
     imageData.receivedChunks++;
 
     const progress = Math.round(
-      (imageData.receivedChunks / imageData.totalChunks) * 100
+      (imageData.receivedChunks / imageData.totalChunks) * 100,
     );
 
     console.log(
-      `📦 Chunk ${chunkIndex + 1}/${imageData.totalChunks} (${progress}%)`
+      `📦 Chunk ${chunkIndex + 1}/${imageData.totalChunks} (${progress}%)`,
     );
 
     // Cập nhật progress
-    setMessages((prev) =>
-      prev.map((msg) =>
+    setMessages(prev =>
+      prev.map(msg =>
         msg._id === messageId
-          ? { ...msg, text: `📷 Đang nhận ảnh... ${progress}%` }
-          : msg
-      )
+          ? {...msg, text: `📷 Đang nhận ảnh... ${progress}%`}
+          : msg,
+      ),
     );
   };
 
-  const handleImageEnd = (
+  const handleImageEnd = async (
     message: string,
     senderName: string,
-    senderAddress: string
+    senderAddress: string,
   ) => {
-    const parts = message.split("|");
+    const parts = message.split('|');
     const messageId = parts[1];
 
     const imageData = imageChunksRef.current[messageId];
     if (!imageData) {
-      console.warn("⚠️ Received end for unknown image:", messageId);
+      console.warn('⚠️ Received end for unknown image:', messageId);
       return;
     }
 
     // Ghép tất cả chunks
-    const base64Image = imageData.chunks.join("");
+    const base64Image = imageData.chunks.join('');
 
     console.log(
       `✅ Image received: ${messageId}, ${(base64Image.length / 1024).toFixed(
-        1
-      )}KB`
+        1,
+      )}KB`,
     );
-
+    const {width, height} = await getSizeImage(
+      `data:image/jpeg;base64,${base64Image}`,
+    );
     // Cập nhật message với ảnh
-    setMessages((prev) =>
-      prev.map((msg) =>
+    setMessages(prev =>
+      prev.map(msg =>
         msg._id === messageId
           ? {
               ...msg,
-              text: "",
+              text: '',
               image: `data:image/jpeg;base64,${base64Image}`,
+              width,
+              height,
             }
-          : msg
-      )
+          : msg,
+      ),
     );
 
     // Xóa khỏi ref
     delete imageChunksRef.current[messageId];
   };
 
-  const addMessage = (message: IMessage) => {
-    setMessages((previousMessages) =>
-      GiftedChat.append(previousMessages, [message])
-    );
+  const addMessage = (message: CustomMessage) => {
+    setMessages(previousMessages => [message, ...previousMessages]);
   };
 
   const addSystemMessage = (text: string) => {
@@ -278,55 +270,61 @@ const MessageScreen = () => {
       createdAt: new Date(),
       user: {
         _id: 0,
-        name: "System",
+        name: 'System',
       },
       system: true,
     });
   };
 
-  const onSend = useCallback(
-    async (messages: IMessage[] = []) => {
-      if (connectedDevices.length === 0) {
-        Alert.alert(
-          "⚠️ Chưa kết nối",
-          "Vui lòng kết nối với thiết bị khác trước"
-        );
-        return;
-      }
+  const handleSendMessage = async (text: string) => {
+    if (connectedDevices.length === 0) {
+      Alert.alert(
+        '⚠️ Chưa kết nối',
+        'Vui lòng kết nối với thiết bị khác trước',
+      );
+      return;
+    }
 
-      const message = messages[0];
-      try {
-        await BluetoothModule.sendMessageToAll(message.text);
-        addMessage(message);
-        console.log("✅ Sent message:", message.text);
-      } catch (error: any) {
-        console.error("❌ Send error:", error);
-        Alert.alert("❌ Lỗi", "Không thể gửi tin nhắn");
-      }
-    },
-    [connectedDevices, bluetoothName, bluetoothAddress]
-  );
+    const newMessage: CustomMessage = {
+      _id: `msg_${Date.now()}`,
+      text: text,
+      createdAt: new Date(),
+      user: {
+        _id: bluetoothAddress || 'me',
+        name: bluetoothName || 'Tôi',
+      },
+    };
+
+    try {
+      await BluetoothModule.sendMessageToAll(text);
+      addMessage(newMessage);
+      console.log('✅ Sent message:', text);
+    } catch (error: any) {
+      console.error('❌ Send error:', error);
+      Alert.alert('❌ Lỗi', 'Không thể gửi tin nhắn');
+    }
+  };
 
   const pickImage = async () => {
     try {
       if (connectedDevices.length === 0) {
         Alert.alert(
-          "⚠️ Chưa kết nối",
-          "Vui lòng kết nối với thiết bị khác trước khi gửi ảnh"
+          '⚠️ Chưa kết nối',
+          'Vui lòng kết nối với thiết bị khác trước khi gửi ảnh',
         );
         return;
       }
 
       const hasPermission = await requestPermissions();
       if (!hasPermission) {
-        Alert.alert("⚠️ Quyền bị từ chối", "Cần quyền truy cập ảnh");
+        Alert.alert('⚠️ Quyền bị từ chối', 'Cần quyền truy cập ảnh');
         return;
       }
 
       setIsLoading(true);
 
       const result = await launchImageLibrary({
-        mediaType: "photo",
+        mediaType: 'photo',
         quality: 1.0,
         selectionLimit: 1,
       });
@@ -338,7 +336,7 @@ const MessageScreen = () => {
 
       if (result.errorCode) {
         setIsLoading(false);
-        Alert.alert("❌ Lỗi", result.errorMessage || "Không thể chọn ảnh");
+        Alert.alert('❌ Lỗi', result.errorMessage || 'Không thể chọn ảnh');
         return;
       }
 
@@ -347,7 +345,7 @@ const MessageScreen = () => {
 
         if (!asset.uri) {
           setIsLoading(false);
-          Alert.alert("❌ Lỗi", "Không thể đọc ảnh");
+          Alert.alert('❌ Lỗi', 'Không thể đọc ảnh');
           return;
         }
 
@@ -356,41 +354,37 @@ const MessageScreen = () => {
           asset.uri,
           asset.width && asset.width > 1920 ? 1920 : asset.width || 1920,
           asset.height && asset.height > 1920 ? 1920 : asset.height || 1920,
-          "JPEG",
+          'JPEG',
           60,
           0,
           undefined,
-          false
+          false,
         );
 
-        // Đọc Base64
         const base64Image = await RNFS.readFile(
-          compressedImage.uri.replace("file://", ""),
-          "base64"
-        );
-
-        console.log(
-          "📤 Compressed:",
-          (base64Image.length / 1024).toFixed(1),
-          "KB"
+          compressedImage.uri.replace('file://', ''),
+          'base64',
         );
 
         const messageId = `img_${Date.now()}`;
         const timestamp = Date.now();
+        const {width, height} = await getSizeImage(
+          `data:image/jpeg;base64,${base64Image}`,
+        );
 
-        // Thêm message preview ngay
         addMessage({
           _id: messageId,
-          text: "",
+          text: '',
           createdAt: new Date(timestamp),
           user: {
-            _id: bluetoothAddress || "me",
-            name: bluetoothName || "Tôi",
+            _id: bluetoothAddress || 'me',
+            name: bluetoothName || 'Tôi',
           },
           image: `data:image/jpeg;base64,${base64Image}`,
+          width,
+          height,
         });
 
-        // Chia thành chunks và gửi
         const TOTAL_CHUNKS = 10;
         const chunkSize = Math.ceil(base64Image.length / TOTAL_CHUNKS);
         const chunks: string[] = [];
@@ -401,153 +395,67 @@ const MessageScreen = () => {
           chunks.push(base64Image.substring(start, end));
         }
 
-        // Gửi header
         await BluetoothModule.sendMessageToAll(
-          `IMG_START|${messageId}|${TOTAL_CHUNKS}|${timestamp}`
+          `IMG_START|${messageId}|${TOTAL_CHUNKS}|${timestamp}`,
         );
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-        // Gửi từng chunk
         for (let i = 0; i < chunks.length; i++) {
           await BluetoothModule.sendMessageToAll(
-            `IMG_CHUNK|${messageId}|${i}|${chunks[i]}`
+            `IMG_CHUNK|${messageId}|${i}|${chunks[i]}`,
           );
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
 
-        // Gửi end marker
         await BluetoothModule.sendMessageToAll(`IMG_END|${messageId}`);
 
-        console.log("✅ Đã gửi xong ảnh");
         setIsLoading(false);
       }
     } catch (error: any) {
       setIsLoading(false);
-      console.error("❌ Image picker error:", error);
-      Alert.alert("❌ Lỗi", error.message || "Không thể chọn/gửi ảnh");
+      console.error('❌ Image picker error:', error);
+      Alert.alert('❌ Lỗi', error.message || 'Không thể chọn/gửi ảnh');
     }
   };
 
-  // Custom UI Components
-  const renderSend = (props: any) => {
-    return (
-      <Send {...props} containerStyle={styles.sendContainer}>
-        <View style={styles.sendButton}>
-          <Icon name="send" size={24} color="#007AFF" />
-        </View>
-      </Send>
-    );
-  };
-  const renderMessageImage = (props:MessageImageProps<IMessage>) => {
   return (
-    <MessageImage
-      {...props}
-      imageStyle={{
-        width: 200,
-        height: 600,
-        borderRadius: 10,
-        margin: 5,
-        resizeMode: "contain",
-      }}
-    />
-  );
-};
-  const renderBubble = (props: any) => {
-    return (
-      <Bubble
-        {...props}
-        wrapperStyle={{
-          right: {
-            backgroundColor: "#007AFF",
-          },
-          left: {
-            backgroundColor: "#E5E5EA",
-          },
+    <Box style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+      <Box
+        pt={insets.top + 10}
+        backgroundColor={colors.primary}
+        px={20}
+        pb={20}
+        gap={10}
+        flexDirection="row"
+        alignItems="center"
+        onPress={()=>{
+          goBack()
         }}
-        textStyle={{
-          right: {
-            color: "#fff",
-          },
-          left: {
-            color: "#000",
-          },
-        }}
-      />
-    );
-  };
-
-  const renderInputToolbar = (props: any) => {
-    return (
-      <InputToolbar
-        {...props}
-        containerStyle={styles.inputToolbar}
-        primaryStyle={styles.primaryInput}
-      />
-    );
-  };
-
-  const renderActions = (props: any) => {
-    return (
-      <Actions
-        {...props}
-        containerStyle={styles.actionsContainer}
-        icon={() => <Icon name="image" size={28} color="#007AFF" />}
-        onPressActionButton={pickImage}
-      />
-    );
-  };
-
-  const renderLoading = () => {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
-  };
-
-  return (
-    <View style={styles.container}>
-      {/* Header thông tin kết nối */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <Text style={styles.headerTitle}>
-          {connectedDevices.length > 0
-            ? `📱 Đã kết nối với ${connectedDevices.length} thiết bị`
-            : "⚠️ Chưa kết nối"}
+        >
+        <ArrowLeft color={colors.white} />
+        <Text fontSize={20} color={colors.white}>
+          {bluetoothName}
         </Text>
-        <Text style={styles.headerSubtitle}>{bluetoothName}</Text>
-      </View>
+      </Box>
 
-      {/* Gifted Chat */}
-      <GiftedChat
+      <CustomChatView
         messages={messages}
-        onSend={(messages) => onSend(messages)}
-        user={{
-          _id: bluetoothAddress || "me",
-          name: bluetoothName || "Tôi",
-        }}
-        renderSend={renderSend}
-        renderBubble={renderBubble}
-        renderInputToolbar={renderInputToolbar}
-        renderActions={renderActions}
-        renderLoading={renderLoading}
+        currentUserId={bluetoothAddress || 'me'}
+        currentUserName={bluetoothName || 'Tôi'}
+        onSend={handleSendMessage}
+        onImagePress={pickImage}
         placeholder="Nhập tin nhắn..."
-        alwaysShowSend
-        showUserAvatar={false}
-        renderUsernameOnMessage
-        renderAvatarOnTop
-        inverted={true}
-        renderMessageImage={(props) => <RenderMessageImage {...props} />}
-      
+        showImageButton={true}
       />
 
-      {/* Loading overlay khi đang chọn ảnh */}
       {isLoading && (
-        <View style={styles.loadingOverlay}>
+        <Box style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
           <Text style={styles.loadingText}>Đang xử lý ảnh...</Text>
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 };
 
@@ -556,70 +464,35 @@ export default MessageScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: '#fff',
   },
   header: {
-    backgroundColor: "#007AFF",
+    backgroundColor: '#007AFF',
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
   headerTitle: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
+    fontWeight: '600',
+    color: '#fff',
   },
   headerSubtitle: {
     fontSize: 12,
-    color: "rgba(255,255,255,0.8)",
+    color: 'rgba(255,255,255,0.8)',
     marginTop: 4,
   },
-  sendContainer: {
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 10,
-    marginBottom: 5,
-  },
-  sendButton: {
-    justifyContent: "center",
-    alignItems: "center",
-    width: 40,
-    height: 40,
-  },
-  inputToolbar: {
-    borderTopWidth: 1,
-    borderTopColor: "#E5E5EA",
-    backgroundColor: "#fff",
-    paddingVertical: 5,
-  },
-  primaryInput: {
-    alignItems: "center",
-  },
-  actionsContainer: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 4,
-    marginRight: 4,
-    marginBottom: 0,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
   loadingOverlay: {
-    position: "absolute",
+    position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingText: {
-    color: "#fff",
+    color: '#fff',
     marginTop: 12,
     fontSize: 16,
   },
