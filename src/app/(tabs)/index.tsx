@@ -23,6 +23,7 @@ import { Box } from "../../components/common/Layout/Box";
 import ImageResizer from 'react-native-image-resizer';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { navigate } from "../../utils/navigationUtils";
+import StartLogo from "../../components/common/StartLogo";
 
 
 // Interface cho device
@@ -406,105 +407,7 @@ const HomeScreen = () => {
   // Giao diện kết nối
   return (
     <Box style={[styles.container, { paddingTop: top, paddingBottom: bottom }]}>
-      <Text style={styles.title}>💬 Chat qua Bluetooth</Text>
-
-      {/* Trạng thái */}
-      <View style={styles.statusContainer}>
-        <Text style={styles.statusText}>
-          Bluetooth: {isEnabled ? "✅ Đã bật" : "❌ Chưa bật"}
-        </Text>
-        {connectedDevices.length > 0 && (
-          <Text style={styles.statusText}>
-            ✅ Đã kết nối với {connectedDevices.length} thiết bị
-          </Text>
-        )}
-      </View>
-
-      {/* Đổi tên Bluetooth */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🏷️ Tên thiết bị của bạn</Text>
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: John, Mary..."
-            value={bluetoothName}
-            onChangeText={setBluetoothName}
-            maxLength={20}
-          />
-          <Button title="Lưu" onPress={handleRename} />
-        </View>
-        <Text style={styles.hint}>💡 Người khác sẽ thấy tên này khi quét</Text>
-      </View>
-
-      {/* Các nút chức năng */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>⚙️ Chức năng</Text>
-
-        <View style={styles.buttonRow}>
-          <View style={styles.buttonWrapper}>
-            <Button
-              title={discovering ? "⏸ Dừng" : "🔍 Quét"}
-              onPress={discovering ? stopDiscovery : startDiscovery}
-              disabled={!isEnabled}
-            />
-          </View>
-          <View style={styles.buttonWrapper}>
-            <Button
-              title="🌐 Chờ kết nối"
-              onPress={startServer}
-              disabled={!isEnabled}
-            />
-          </View>
-        </View>
-
-        <View style={styles.buttonRow}>
-          <View style={styles.buttonWrapper}></View>
-          {connectedDevices.length > 0 && (
-            <View style={styles.buttonWrapper}>
-              <Button
-                title="❌ Ngắt tất cả"
-                onPress={disconnectAll}
-                color="#FF3B30"
-              />
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Indicator khi đang quét */}
-      {discovering && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color="#007AFF" />
-          <Text style={styles.loadingText}>Đang tìm thiết bị chạy app...</Text>
-        </View>
-      )}
-
-      {/* Danh sách thiết bị */}
-      {(devices.length > 0 || pairedDevices.length > 0) && (
-        <View style={styles.deviceSection}>
-          <Text style={styles.sectionTitle}>
-            📱 Thiết bị khả dụng ({devices.length + pairedDevices.length})
-          </Text>
-          <FlatList
-            data={[...pairedDevices, ...devices]}
-            keyExtractor={(item, index) => `${item.address}-${index}`}
-            renderItem={renderDevice}
-            style={styles.deviceList}
-          />
-        </View>
-      )}
-
-      {/* Thông báo khi chưa có thiết bị */}
-      {!discovering && devices.length === 0 && pairedDevices.length === 0 && (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>📱</Text>
-          <Text style={styles.emptyText}>Chưa tìm thấy thiết bị nào</Text>
-          <Text style={styles.emptyHint}>
-            Nhấn "Quét" để tìm thiết bị{"\n"}
-            hoặc "Chờ kết nối" để người khác kết nối đến
-          </Text>
-        </View>
-      )}
+      <StartLogo />
     </Box>
   );
 };
