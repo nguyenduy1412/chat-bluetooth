@@ -21,7 +21,7 @@ const ImageModal: React.FC<ImageProps> = ({visible, onClose, item}) => {
       style={styles.modal}
       animationIn="zoomIn"
       animationOut="zoomOut"
-      animationInTiming={800}
+      animationInTiming={500}
       animationOutTiming={500}>
       <Box onPress={onClose}>
         <Image

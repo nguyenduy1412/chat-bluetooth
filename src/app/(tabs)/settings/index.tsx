@@ -77,6 +77,11 @@ const data: ItemSetting[] = [
     title: 'Thông tin cá nhân',
     icon: PROFILE_ICON,
     size: 60,
+    onPress:()=>{
+      navigate('SettingStack', {
+        screen: 'Profile',
+      });
+    }
   },
   {
     id: '4',

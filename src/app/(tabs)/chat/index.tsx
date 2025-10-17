@@ -13,6 +13,7 @@ import {navigate} from '../../../utils/navigationUtils';
 import {Box} from '../../../components/common/Layout/Box';
 import {Text} from '../../../components/common/Text/Text';
 import {colors} from '../../../theme/colors';
+import {formatName} from '../../../features/chat/utils/formatName';
 
 // Interface cho device
 interface BluetoothDevice {
@@ -108,7 +109,7 @@ const ListMessageScreen = () => {
       if (!isEnabled) return;
 
       // Bật discoverable
-      await BluetoothModule.makeDiscoverable(300);
+      await BluetoothModule.makeDiscoverable(3000);
       console.log('✅ Đã bật chế độ hiển thị (5 phút)');
 
       // Start server để chờ kết nối
@@ -180,6 +181,7 @@ const ListMessageScreen = () => {
         });
         navigate('ChatStack', {
           screen: 'Message',
+          params: { name: info.deviceName}
         });
       },
     );
@@ -252,7 +254,6 @@ const ListMessageScreen = () => {
         bluetoothName = 'BLE' + bluetoothName;
         await BluetoothModule.setBluetoothName(bluetoothName);
 
-        // Verify tên đã đổi
         let retry = 0;
         while (retry < 5) {
           const currentName = await BluetoothModule.getBluetoothName();
@@ -270,7 +271,6 @@ const ListMessageScreen = () => {
     }
   }, []);
 
-  // ✅ Init khi mount - Tự động bật server + discoverable
   useEffect(() => {
     const init = async () => {
       const hasPermission = await requestPermissions();
@@ -297,7 +297,6 @@ const ListMessageScreen = () => {
     };
   }, []);
 
-  // ✅ Auto start server khi Bluetooth được bật
   useEffect(() => {
     if (isEnabled) {
       initializeBluetoothServer();
@@ -308,24 +307,24 @@ const ListMessageScreen = () => {
     isConnectedDevice: boolean,
     item: BluetoothDevice,
   ) => {
+    console.log('isConnectedDevice', item.name);
     if (!isConnectedDevice) {
       connectTo(item);
     } else {
       navigate('ChatStack', {
         screen: 'Message',
+        params: { name: item.name }
       });
     }
   };
- 
+
   const renderDevice = ({item}: {item: BluetoothDevice}) => {
     const isConnectedDevice = connectedDevices.some(
       d => d.address === item.address,
     );
 
     return (
-      <TouchableOpacity
-        onPress={() => handleConected(isConnectedDevice, item)}
-        disabled={isConnectedDevice}>
+      <TouchableOpacity onPress={() => handleConected(isConnectedDevice, item)}>
         <Box
           backgroundColor="white"
           p={16}
@@ -335,16 +334,11 @@ const ListMessageScreen = () => {
           alignItems="center">
           <Box flex={1}>
             <Text fontSize={17} fontWeight="bold" color="#333">
-              {item.name || 'Unknown'} {isConnectedDevice && '✅'}
+              {formatName(item.name) || 'Unknown'} {isConnectedDevice && '✅'}
             </Text>
             <Text fontSize={12} color="#999">
               {item.address}
             </Text>
-            {item.bondState === 'BONDED' && (
-              <Text fontSize={11} color="#007AFF">
-                🔗 Đã ghép nối
-              </Text>
-            )}
           </Box>
           <TouchableOpacity
             onPress={() =>
@@ -406,7 +400,6 @@ const ListMessageScreen = () => {
         </Box>
       )}
 
-      {/* Indicator khi đang quét */}
       {discovering && (
         <Box
           flexDirection="row"
@@ -445,6 +438,29 @@ const ListMessageScreen = () => {
               title="Kéo để quét thiết bị"
               titleColor="#666"
             />
+          }
+          ListHeaderComponent={
+            <TouchableOpacity
+              onPress={() => {
+                navigate('ChatStack', {
+                  screen:'ChatAI'
+                }
+                )
+              }}>
+              <Box
+                backgroundColor="white"
+                p={16}
+                mb={10}
+                borderRadius={12}
+                flexDirection="row"
+                alignItems="center">
+                <Box flex={1}>
+                  <Text fontSize={17} fontWeight="bold" color="#333">
+                    AI
+                  </Text>
+                </Box> 
+              </Box>
+            </TouchableOpacity>
           }
           ListEmptyComponent={
             !discovering ? (

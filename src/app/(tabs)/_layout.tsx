@@ -16,13 +16,16 @@ import ListMessageScreen from "./chat";
 import SettingsScreen from "./settings";
 import MapScreen from "./map";
 import useModelStore from "../../store/modelStore";
+import useProfileStore from "../../store/profileStore";
 
 const Tab = createBottomTabNavigator();
 
 export default function TabStack() {
   const {loadModels} = useModelStore();
+  const {loadProfile} = useProfileStore();
   useEffect(() => {
     loadModels();
+    loadProfile();
   }, []);
   return (
     <Tab.Navigator tabBar={(props) => <AnimatedTabBar {...props} />}>

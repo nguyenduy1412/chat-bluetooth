@@ -84,8 +84,10 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
         flexDirection="row"
         mx={2}
         justifyContent={isMyMessage ? 'flex-end' : 'flex-start'}
-        mb={10}>
-        <Box>
+        mb={10}
+        style={{maxWidth: '100%'}}
+        >
+        <Box style={{maxWidth: '80%'}}>
           <Box
             backgroundColor={isMyMessage ? colors.skyBlue : colors.divider}
             p={item.image ? 5 : 16}
@@ -93,7 +95,8 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
             borderTopRightRadius={20}
             borderBottomLeftRadius={isMyMessage ? 20 : 2}
             borderBottomRightRadius={isMyMessage ? 2 : 20}
-            onPress={() => handleShowImage(item.image!)}>
+            onPress={() => handleShowImage(item.image!)}
+            >
             {item.image && (
               <Image
                 source={{uri: item.image}}
@@ -106,6 +109,7 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
             )}
             {item.text.length > 0 && (
               <Text
+                style={{maxWidth:'100%'}}
                 fontSize={16}
                 color={isMyMessage ? colors.white : colors.black}>
                 {item.text}

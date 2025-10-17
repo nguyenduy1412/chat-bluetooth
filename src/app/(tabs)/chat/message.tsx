@@ -15,14 +15,20 @@ import {ArrowLeft, BackpackIcon} from 'lucide-react-native';
 import {colors} from '../../../theme/colors';
 import {Text} from '../../../components/common/Text/Text';
 import { goBack, navigate } from '../../../utils/navigationUtils';
+import { formatName } from '../../../features/chat/utils/formatName';
+import { RouteProp, useRoute } from '@react-navigation/native';
+import { RootNavigatorParamList } from '../../../types/navigation-type';
 
 interface BluetoothDevice {
   name: string;
   address: string;
   paired?: boolean;
 }
-
+type DeviceProp={
+  name: string;
+}
 const MessageScreen = () => {
+  const route = useRoute<RouteProp<RootNavigatorParamList, 'MessageScreen'>>();
   const [messages, setMessages] = useState<CustomMessage[]>([]);
   const [bluetoothName, setBluetoothName] = useState<string>('');
   const [bluetoothAddress, setBluetoothAddress] = useState<string>('');
@@ -435,7 +441,7 @@ const MessageScreen = () => {
         >
         <ArrowLeft color={colors.white} />
         <Text fontSize={20} color={colors.white}>
-          {bluetoothName}
+          {formatName(route?.params?.name)}
         </Text>
       </Box>
 
