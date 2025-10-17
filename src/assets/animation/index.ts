@@ -5,3 +5,7 @@ export const CHAT_ICON = require('./chat.icon.json');
 export const SETTINGS_ICON = require('./setting.icon.json');
 export const SEND_ICON = require('./send.icon.json');
 export const IMAGE_ICON = require('./image.icon.json');
+export const ROBOT_ICON = require('./robot.json');
+export const MAP_ICON = require('./map.json');
+export const PROFILE_ICON = require('./profile.json');
+export const LOGOUT_ICON = require('./logout.json');

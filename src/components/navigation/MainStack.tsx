@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AuthStack from '../../app/(auth)/_layout';
 import TabStack from '../../app/(tabs)/_layout';
 import ChatStack from '../../app/(tabs)/chat/_layout';
+import SettingsStack from '../../app/(tabs)/settings/_layout';
 const Stack = createNativeStackNavigator<RootNavigatorParamList>();
 const MainStack = () => {
   return (
@@ -12,6 +13,7 @@ const MainStack = () => {
         <Stack.Screen name="AuthStack" component={AuthStack} />
         <Stack.Screen name="TabStack" component={TabStack} />
         <Stack.Screen name="ChatStack" component={ChatStack} />
+        <Stack.Screen name="SettingStack" component={SettingsStack} />
       </Stack.Navigator>
   )
 }

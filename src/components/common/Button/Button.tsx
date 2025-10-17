@@ -8,8 +8,8 @@ import { colors } from '../../../theme/colors';
 
 type ButtonProps = {
   text?: string;
-  onPress: () => void;
-  title: string;
+  onPress?: () => void;
+  title?: string;
   disabled?: boolean;
   isLoading?: boolean;
   variant?: ButtonVariant;
@@ -17,13 +17,14 @@ type ButtonProps = {
   textStyle?: object;
   rightIcon?: React.ReactNode;
   leftIcon?: React.ReactNode;
+  icon?: React.ReactNode;
 };
 
-const Button: React.FC<ButtonProps> = ({ onPress, title, disabled, isLoading, variant, text, style, textStyle, rightIcon, leftIcon }) => {
+const Button: React.FC<ButtonProps> = ({ onPress, title, disabled, isLoading, variant, text, style, textStyle, rightIcon, leftIcon, icon }) => {
   return (
     <TouchableOpacity onPress={onPress} disabled={disabled || isLoading} style={[styles.button, style]}>
       {leftIcon && <Box>{leftIcon}</Box>}
-      {isLoading ? <Spinner color={colors.white} /> : <Text style={[styles.text, textStyle]}>{title}</Text>}
+      {isLoading ? <Spinner color={colors.white} /> : (icon ? icon : <Text style={[styles.text, textStyle]}>{title}</Text>)}
       {rightIcon && <Box>{rightIcon}</Box>}
     </TouchableOpacity>
   )

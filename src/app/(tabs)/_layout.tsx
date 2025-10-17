@@ -13,11 +13,17 @@ import { CHAT_ICON, HOME_ICON, SETTINGS_ICON, UPLOAD_ICON } from "../../assets/a
 import { Box } from "lucide-react-native";
 import { Text } from "react-native-gesture-handler";
 import ListMessageScreen from "./chat";
-const MAIN_ROUTES: string[] = ["/", "/event", "/chat", "/profile"];
-const WHITE_LIST_ROUTES: string[] = [];
+import SettingsScreen from "./settings";
+import MapScreen from "./map";
+import useModelStore from "../../store/modelStore";
+
 const Tab = createBottomTabNavigator();
 
 export default function TabStack() {
+  const {loadModels} = useModelStore();
+  useEffect(() => {
+    loadModels();
+  }, []);
   return (
     <Tab.Navigator tabBar={(props) => <AnimatedTabBar {...props} />}>
       <Tab.Screen
@@ -50,7 +56,7 @@ export default function TabStack() {
           ),
           headerShown: false,
         }}
-        component={PlaceholderScreen}
+        component={MapScreen}
       />
       <Tab.Screen
         name="Chat"
@@ -82,7 +88,7 @@ export default function TabStack() {
           ),
           headerShown: false,
         }}
-        component={PlaceholderScreen}
+        component={SettingsScreen}
       />
     </Tab.Navigator>
   );

@@ -1,9 +1,10 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useState, useCallback} from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   TouchableOpacity,
+  RefreshControl,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import BluetoothModule from '../../../assets/managers/BluetoothModule';
@@ -63,44 +64,24 @@ const ListMessageScreen = () => {
     }
   };
 
-  // ✅ Quét thiết bị (chỉ app của bạn)
-  const startDiscovery = async () => {
+  // ✅ Quét thiết bị (dùng cho refresh)
+  const startDiscovery = useCallback(async () => {
     try {
-      const hasPermission = await requestPermissions();
-      if (!hasPermission) {
-        Alert.alert(
-          '⚠️ Quyền bị từ chối',
-          'Chưa được cấp quyền Bluetooth và Location',
-        );
-        return;
-      }
-
-      const enabled = await checkAndEnableBluetooth();
-      if (!enabled) {
+      if (!isEnabled) {
+        Alert.alert('⚠️ Bluetooth chưa bật', 'Vui lòng bật Bluetooth trước');
         return;
       }
 
       setDiscovering(true);
       setDevices([]);
-      const res = await BluetoothModule.startDiscovery();
-      console.log('====================================');
-      console.log('Discovery started:', res);
-      console.log('====================================');
+      await BluetoothModule.startDiscovery();
+      console.log('🔍 Bắt đầu quét thiết bị');
     } catch (error: any) {
       console.error('Discovery error:', error);
       setDiscovering(false);
+      Alert.alert('❌ Lỗi quét', error.message || String(error));
     }
-  };
-
-  // ✅ Dừng quét
-  const stopDiscovery = async () => {
-    try {
-      await BluetoothModule.stopDiscovery();
-      setDiscovering(false);
-    } catch (error: any) {
-      console.error('Stop discovery error:', error);
-    }
-  };
+  }, [isEnabled]);
 
   // ✅ Kết nối tới thiết bị
   const connectTo = async (device: BluetoothDevice) => {
@@ -121,45 +102,22 @@ const ListMessageScreen = () => {
     }
   };
 
-  // ✅ Khởi động server (chờ kết nối đến)
-  const startServer = async () => {
+  // ✅ Khởi động server và discoverable (gọi ngay khi vào màn hình)
+  const initializeBluetoothServer = useCallback(async () => {
     try {
-      const hasPermission = await requestPermissions();
-      if (!hasPermission) {
-        Alert.alert('⚠️ Quyền bị từ chối', 'Chưa được cấp quyền Bluetooth');
-        return;
-      }
+      if (!isEnabled) return;
 
+      // Bật discoverable
+      await BluetoothModule.makeDiscoverable(300);
+      console.log('✅ Đã bật chế độ hiển thị (5 phút)');
+
+      // Start server để chờ kết nối
       await BluetoothModule.startServer();
+      console.log('✅ Server đã sẵn sàng chờ kết nối');
     } catch (error: any) {
-      console.error('Start server error:', error);
-      Alert.alert('❌ Lỗi', error.message || String(error));
+      console.error('Initialize server error:', error);
     }
-  };
-
-  // ✅ Bật chế độ Discoverable (tự động đổi tên có prefix BLE)
-  const makeDeviceDiscoverable = async () => {
-    try {
-      const hasPermission = await requestPermissions();
-      if (!hasPermission) {
-        Alert.alert('⚠️ Quyền bị từ chối', 'Chưa được cấp quyền Bluetooth');
-        return;
-      }
-
-      const enabled = await checkAndEnableBluetooth();
-      if (!enabled) {
-        return;
-      }
-
-      // Bật discoverable trong 300 giây (5 phút)
-      const message = await BluetoothModule.makeDiscoverable(300);
-      console.log('✅ Discoverable:', message);
-      Alert.alert('✅ Thành công', message);
-    } catch (error: any) {
-      console.error('Make discoverable error:', error);
-      Alert.alert('❌ Lỗi', error.message || String(error));
-    }
-  };
+  }, [isEnabled]);
 
   const disconnect = async (address: string) => {
     try {
@@ -183,7 +141,11 @@ const ListMessageScreen = () => {
       'onDeviceFound',
       (device: BluetoothDevice) => {
         console.log('✅ Tìm thấy thiết bị app:', device);
-        if (!device.name || device.name.toLowerCase() === 'unknown' || !device.name.startsWith('BLE')) {
+        if (
+          !device.name ||
+          device.name.toLowerCase() === 'unknown' ||
+          !device.name.startsWith('BLE')
+        ) {
           return;
         }
         setDevices(prev => {
@@ -281,50 +243,49 @@ const ListMessageScreen = () => {
       connectionFailedListener.remove();
     };
   }, []);
-  const autoRename = async () => {
-  try {
-    let retry = 0;
-    let bluetoothName = await BluetoothModule.getBluetoothName();
 
-    // Nếu chưa có prefix BLE thì đặt lại
-    if (!bluetoothName.startsWith("BLE")) {
-      bluetoothName = "BLE" + bluetoothName;
+  const autoRename = useCallback(async () => {
+    try {
+      let bluetoothName = await BluetoothModule.getBluetoothName();
+
+      if (!bluetoothName.startsWith('BLE')) {
+        bluetoothName = 'BLE' + bluetoothName;
+        await BluetoothModule.setBluetoothName(bluetoothName);
+
+        // Verify tên đã đổi
+        let retry = 0;
+        while (retry < 5) {
+          const currentName = await BluetoothModule.getBluetoothName();
+          if (currentName === bluetoothName) {
+            console.log('✅ Đổi tên Bluetooth thành công:', currentName);
+            return;
+          }
+          await new Promise(res => setTimeout(res, 1000));
+          retry++;
+        }
+        console.warn('⚠️ Đổi tên Bluetooth thất bại sau 5 lần thử');
+      }
+    } catch (err) {
+      console.error('❌ Lỗi khi đổi tên Bluetooth:', err);
     }
+  }, []);
 
-    console.log("🟡 Đang đổi tên:", bluetoothName);
-    await BluetoothModule.setBluetoothName(bluetoothName);
-
-    // 🔁 Lặp lại cho đến khi tên thực sự đổi
-    while (retry < 10) { // tránh lặp vô hạn
-      const currentName = await BluetoothModule.getBluetoothName();
-
-      if (currentName === bluetoothName) {
-        console.log("✅ Đổi tên Bluetooth thành công:", currentName);
+  // ✅ Init khi mount - Tự động bật server + discoverable
+  useEffect(() => {
+    const init = async () => {
+      const hasPermission = await requestPermissions();
+      if (!hasPermission) {
+        Alert.alert(
+          '⚠️ Quyền bị từ chối',
+          'Cần cấp quyền Bluetooth và Location để sử dụng tính năng này',
+        );
         return;
       }
 
-      console.log("⏳ Chờ đổi tên... lần", retry + 1);
-      await new Promise((res) => setTimeout(res, 1000)); // đợi 1s rồi thử lại
-      retry++;
-    }
-
-    console.warn("⚠️ Đổi tên Bluetooth thất bại sau 10 lần thử");
-  } catch (err) {
-    console.error("❌ Lỗi khi đổi tên Bluetooth:", err);
-  }
-};
-
-  // ✅ Init khi mount
-  useEffect(() => {
-    const init = async () => {
-      const status = await requestPermissions();
-      await checkAndEnableBluetooth();
-      if (status) {
-        startServer();
-        autoRename();
-        let bluetoothName = await BluetoothModule.getBluetoothName();
-        console.log('alo',bluetoothName);
-        
+      const enabled = await checkAndEnableBluetooth();
+      if (enabled) {
+        await autoRename();
+        await initializeBluetoothServer();
       }
     };
 
@@ -336,7 +297,26 @@ const ListMessageScreen = () => {
     };
   }, []);
 
-  // Render device item
+  // ✅ Auto start server khi Bluetooth được bật
+  useEffect(() => {
+    if (isEnabled) {
+      initializeBluetoothServer();
+    }
+  }, [isEnabled, initializeBluetoothServer]);
+
+  const handleConected = (
+    isConnectedDevice: boolean,
+    item: BluetoothDevice,
+  ) => {
+    if (!isConnectedDevice) {
+      connectTo(item);
+    } else {
+      navigate('ChatStack', {
+        screen: 'Message',
+      });
+    }
+  };
+ 
   const renderDevice = ({item}: {item: BluetoothDevice}) => {
     const isConnectedDevice = connectedDevices.some(
       d => d.address === item.address,
@@ -344,7 +324,7 @@ const ListMessageScreen = () => {
 
     return (
       <TouchableOpacity
-        onPress={() => !isConnectedDevice && connectTo(item)}
+        onPress={() => handleConected(isConnectedDevice, item)}
         disabled={isConnectedDevice}>
         <Box
           backgroundColor="white"
@@ -384,7 +364,7 @@ const ListMessageScreen = () => {
       </TouchableOpacity>
     );
   };
-  // Giao diện kết nối
+
   return (
     <Box
       flex={1}
@@ -408,79 +388,23 @@ const ListMessageScreen = () => {
         )}
       </Box>
 
-      {/* Các nút chức năng */}
-      <Box mb={16}>
-        <Text fontSize={16} fontWeight="bold" color="#333">
-          ⚙️ Chức năng
-        </Text>
-
-        <Box flexDirection="row" mb={8} gap={8}>
-          <Box flex={1}>
-            <TouchableOpacity
-              onPress={discovering ? stopDiscovery : startDiscovery}
-              disabled={!isEnabled}>
-              <Box
-                backgroundColor={!isEnabled ? '#ccc' : '#007AFF'}
-                py={12}
-                borderRadius={8}
-                alignItems="center">
-                <Text color="white" fontWeight="bold">
-                  {discovering ? '⏸ Dừng' : '🔍 Quét'}
-                </Text>
-              </Box>
-            </TouchableOpacity>
-          </Box>
-          <Box flex={1}>
-            <TouchableOpacity
-              onPress={makeDeviceDiscoverable}
-              disabled={!isEnabled}>
-              <Box
-                backgroundColor={!isEnabled ? '#ccc' : '#34C759'}
-                py={12}
-                borderRadius={8}
-                alignItems="center">
-                <Text color="white" fontWeight="bold">
-                  📡 Hiển thị
-                </Text>
-              </Box>
-            </TouchableOpacity>
-          </Box>
+      {/* Nút ngắt kết nối */}
+      {connectedDevices.length > 0 && (
+        <Box mb={16} flexDirection="row" justifyContent="flex-end">
+          <TouchableOpacity onPress={disconnectAll}>
+            <Box
+              backgroundColor="#FF3B30"
+              py={12}
+              px={20}
+              borderRadius={8}
+              alignItems="center">
+              <Text color="white" fontWeight="bold">
+                ❌ Ngắt tất cả ({connectedDevices.length})
+              </Text>
+            </Box>
+          </TouchableOpacity>
         </Box>
-
-        <Box flexDirection="row" mb={8} gap={8}>
-          <Box flex={1}>
-            <TouchableOpacity onPress={startServer} disabled={!isEnabled}>
-              <Box
-                backgroundColor={!isEnabled ? '#ccc' : '#FF9500'}
-                py={12}
-                borderRadius={8}
-                alignItems="center">
-                <Text color="white" fontWeight="bold">
-                  🌐 Chờ kết nối
-                </Text>
-              </Box>
-            </TouchableOpacity>
-          </Box>
-          <Box flex={1} />
-        </Box>
-
-        {connectedDevices.length > 0 && (
-          <Box flexDirection="row" justifyContent="flex-end">
-            <TouchableOpacity onPress={disconnectAll}>
-              <Box
-                backgroundColor="#FF3B30"
-                py={12}
-                px={16}
-                borderRadius={8}
-                alignItems="center">
-                <Text color="white" fontWeight="bold">
-                  ❌ Ngắt tất cả
-                </Text>
-              </Box>
-            </TouchableOpacity>
-          </Box>
-        )}
-      </Box>
+      )}
 
       {/* Indicator khi đang quét */}
       {discovering && (
@@ -499,34 +423,47 @@ const ListMessageScreen = () => {
         </Box>
       )}
 
-      {/* Danh sách thiết bị */}
-      {devices.length > 0 && (
-        <Box flex={1}>
-          <Text fontSize={16} fontWeight="bold" color="#333">
-            📱 Thiết bị khả dụng ({devices.length})
-          </Text>
-          <FlatList
-            data={devices}
-            keyExtractor={(item, index) => `${item.address}-${index}`}
-            renderItem={renderDevice}
-            showsVerticalScrollIndicator={false}
-          />
-        </Box>
-      )}
-
-      {/* Thông báo khi chưa có thiết bị */}
-      {!discovering && devices.length === 0 && (
-        <Box flex={1} justifyContent="center" alignItems="center" py={40}>
-          <Text fontSize={64}>📱</Text>
-          <Text fontSize={18} fontWeight="bold" color="#666">
-            Chưa tìm thấy thiết bị nào
-          </Text>
-          <Text fontSize={14} color="#999" align="center">
-            Nhấn "Quét" để tìm thiết bị{'\n'}
-            hoặc "Chờ kết nối" để người khác kết nối đến
-          </Text>
-        </Box>
-      )}
+      <Box flex={1}>
+        {devices.length > 0 && (
+          <Box mb={10}>
+            <Text fontSize={16} fontWeight="bold" color="#333">
+              📱 Thiết bị khả dụng ({devices.length})
+            </Text>
+          </Box>
+        )}
+        <FlatList
+          data={devices}
+          keyExtractor={(item, index) => `${item.address}-${index}`}
+          renderItem={renderDevice}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={discovering}
+              onRefresh={startDiscovery}
+              colors={['#007AFF']}
+              tintColor="#007AFF"
+              title="Kéo để quét thiết bị"
+              titleColor="#666"
+            />
+          }
+          ListEmptyComponent={
+            !discovering ? (
+              <Box flex={1} justifyContent="center" alignItems="center" py={60}>
+                <Text fontSize={64}>📱</Text>
+                <Box mb={8}>
+                  <Text fontSize={18} fontWeight="bold" color="#666">
+                    Chưa tìm thấy thiết bị nào
+                  </Text>
+                </Box>
+                <Text fontSize={14} color="#999" align="center">
+                  Kéo xuống để quét thiết bị{'\n'}
+                  hoặc đợi người khác kết nối đến bạn
+                </Text>
+              </Box>
+            ) : null
+          }
+        />
+      </Box>
     </Box>
   );
 };

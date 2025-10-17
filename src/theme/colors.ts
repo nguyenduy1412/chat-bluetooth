@@ -66,7 +66,7 @@ textSecondary:'#808080',
   },
   red: "#E40001",
   redLight: "#FEF3F3",
-  green: "#03824F",
+  green: "#2CC069",
   greenLight: "#F2F9F6",
   brown: {
     100: "#391900",

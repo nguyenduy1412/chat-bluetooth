@@ -2,7 +2,7 @@ export type RootNavigatorParamList = {
   AuthStack: undefined;
   TabStack: undefined;
   ChatStack: NavigatorScreenParams<ChatStackParamList>
-
+  SettingStack: NavigatorScreenParams<SettingsStackParamList>
 
   
   UserStack: undefined;

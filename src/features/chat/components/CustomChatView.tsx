@@ -37,20 +37,20 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
     undefined,
   );
   const insets = useSafeAreaInsets();
-  const [paddingBottom, setPaddingBottom] = useState(insets.bottom);
+  const [paddingBottom, setPaddingBottom] = useState(20);
   useEffect(() => {   
     const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
       if (insets.bottom === 0) {
         setPaddingBottom(50);
       } else {
-        setPaddingBottom(insets.bottom);
+        setPaddingBottom(30);
       }
     });
     const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
       if (insets.bottom === 0) {
         setPaddingBottom(10);
       } else {
-        setPaddingBottom(insets.bottom);
+        setPaddingBottom(30);
       }
     });
   }, [paddingBottom]);
