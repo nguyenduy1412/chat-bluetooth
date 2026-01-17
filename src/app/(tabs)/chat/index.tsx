@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useCallback} from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -181,7 +181,7 @@ const ListMessageScreen = () => {
         });
         navigate('ChatStack', {
           screen: 'Message',
-          params: { name: info.deviceName}
+          params: {name: info.deviceName},
         });
       },
     );
@@ -313,7 +313,7 @@ const ListMessageScreen = () => {
     } else {
       navigate('ChatStack', {
         screen: 'Message',
-        params: { name: item.name }
+        params: {name: item.name},
       });
     }
   };
@@ -367,7 +367,7 @@ const ListMessageScreen = () => {
       pt={top}
       pb={bottom}>
       <Text fontSize={26} fontWeight="bold" align="center" color="#333">
-        💬 Chat qua Bluetooth
+       ÷
       </Text>
 
       {/* Trạng thái */}
@@ -443,9 +443,8 @@ const ListMessageScreen = () => {
             <TouchableOpacity
               onPress={() => {
                 navigate('ChatStack', {
-                  screen:'ChatAI'
-                }
-                )
+                  screen: 'ChatAI',
+                });
               }}>
               <Box
                 backgroundColor="white"
@@ -458,7 +457,7 @@ const ListMessageScreen = () => {
                   <Text fontSize={17} fontWeight="bold" color="#333">
                     AI
                   </Text>
-                </Box> 
+                </Box>
               </Box>
             </TouchableOpacity>
           }

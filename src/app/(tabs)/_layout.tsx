@@ -1,22 +1,22 @@
-import React, { useEffect, useReducer, useRef } from "react";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useEffect } from 'react';
+import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
-import Lottie from "lottie-react-native";
-import { StyleSheet } from "react-native";
+import Lottie from 'lottie-react-native';
+import {StyleSheet} from 'react-native';
 
-
-import ChatLayout from "./chat/_layout";
-
-import HomeScreen from ".";
-import { AnimatedTabBar } from "../../components/navigation/AnimatedTabBar";
-import { CHAT_ICON, HOME_ICON, SETTINGS_ICON, UPLOAD_ICON } from "../../assets/animation";
-import { Box } from "lucide-react-native";
-import { Text } from "react-native-gesture-handler";
-import ListMessageScreen from "./chat";
-import SettingsScreen from "./settings";
-import MapScreen from "./map";
-import useModelStore from "../../store/modelStore";
-import useProfileStore from "../../store/profileStore";
+import HomeScreen from '.';
+import {AnimatedTabBar} from '../../components/navigation/AnimatedTabBar';
+import {
+  CHAT_ICON,
+  HOME_ICON,
+  SETTINGS_ICON,
+  UPLOAD_ICON,
+} from '../../assets/animation';
+import ListMessageScreen from './chat';
+import SettingsScreen from './settings';
+import MapScreen from './map';
+import useModelStore from '../../store/modelStore';
+import useProfileStore from '../../store/profileStore';
 
 const Tab = createBottomTabNavigator();
 
@@ -28,12 +28,12 @@ export default function TabStack() {
     loadProfile();
   }, []);
   return (
-    <Tab.Navigator tabBar={(props) => <AnimatedTabBar {...props} />}>
+    <Tab.Navigator tabBar={props => <AnimatedTabBar {...props} />}>
       <Tab.Screen
         name="Home"
         options={{
           // @ts-ignore
-          tabBarIcon: ({ ref }) => (
+          tabBarIcon: ({ref}) => (
             <Lottie
               ref={ref}
               loop={false}
@@ -49,7 +49,7 @@ export default function TabStack() {
         name="Upload"
         options={{
           // @ts-ignore
-          tabBarIcon: ({ ref }) => (
+          tabBarIcon: ({ref}) => (
             <Lottie
               ref={ref}
               loop={false}
@@ -65,7 +65,7 @@ export default function TabStack() {
         name="Chat"
         options={{
           // @ts-ignore
-          tabBarIcon: ({ ref }) => (
+          tabBarIcon: ({ref}) => (
             <Lottie
               ref={ref}
               loop={false}
@@ -81,7 +81,7 @@ export default function TabStack() {
         name="Settings"
         options={{
           // @ts-ignore
-          tabBarIcon: ({ ref }) => (
+          tabBarIcon: ({ref}) => (
             <Lottie
               ref={ref}
               loop={false}
@@ -96,12 +96,6 @@ export default function TabStack() {
     </Tab.Navigator>
   );
 }
-
-const PlaceholderScreen = () => {
-  return <Box style={{ flex: 1, backgroundColor: "white" }}>
-    <Text>áldfdfdf</Text>
-  </Box>;
-};
 
 const styles = StyleSheet.create({
   icon: {

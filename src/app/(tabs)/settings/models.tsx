@@ -1,5 +1,5 @@
 import {Dimensions, StyleSheet} from 'react-native';
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import {Box} from '../../../components/common/Layout/Box';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text} from '../../../components/common/Text/Text';

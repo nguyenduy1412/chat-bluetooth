@@ -5,6 +5,7 @@ export type RootNavigatorParamList = {
   SettingStack: NavigatorScreenParams<SettingsStackParamList>
   MessageScreen:{
     name?:string;
+    deviceAddress?:string;
   }
   
   UserStack: undefined;

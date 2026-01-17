@@ -11,6 +11,7 @@ export interface CustomMessage {
   system?: boolean;
   width?: number;
   height?: number;
+  isStreaming?: boolean;
 };
 
 export interface CustomChatViewProps {

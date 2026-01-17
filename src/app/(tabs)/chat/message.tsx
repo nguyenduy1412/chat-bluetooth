@@ -1,8 +1,7 @@
 import {StyleSheet, Alert, ActivityIndicator, StatusBar} from 'react-native';
-import React, {useCallback, useEffect, useState, useRef} from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import BluetoothModule from '../../../assets/managers/BluetoothModule';
-import {Message} from '../../../types/types';
 import {launchImageLibrary} from 'react-native-image-picker';
 import ImageResizer from 'react-native-image-resizer';
 import RNFS from 'react-native-fs';
@@ -11,22 +10,22 @@ import {CustomChatView} from '../../../features/chat/components/CustomChatView';
 import {CustomMessage} from '../../../features/chat/types';
 import {getSizeImage} from '../../../utils/getSizeImage';
 import {Box} from '../../../components/common/Layout/Box';
-import {ArrowLeft, BackpackIcon} from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import {colors} from '../../../theme/colors';
 import {Text} from '../../../components/common/Text/Text';
-import { goBack, navigate } from '../../../utils/navigationUtils';
-import { formatName } from '../../../features/chat/utils/formatName';
-import { RouteProp, useRoute } from '@react-navigation/native';
-import { RootNavigatorParamList } from '../../../types/navigation-type';
+import { goBack } from '../../../utils/navigationUtils';
+import {formatName} from '../../../features/chat/utils/formatName';
+import {RouteProp, useRoute} from '@react-navigation/native';
+import {RootNavigatorParamList} from '../../../types/navigation-type';
 
 interface BluetoothDevice {
   name: string;
   address: string;
   paired?: boolean;
 }
-type DeviceProp={
+type DeviceProp = {
   name: string;
-}
+};
 const MessageScreen = () => {
   const route = useRoute<RouteProp<RootNavigatorParamList, 'MessageScreen'>>();
   const [messages, setMessages] = useState<CustomMessage[]>([]);
@@ -435,10 +434,9 @@ const MessageScreen = () => {
         gap={10}
         flexDirection="row"
         alignItems="center"
-        onPress={()=>{
-          goBack()
-        }}
-        >
+        onPress={() => {
+          goBack();
+        }}>
         <ArrowLeft color={colors.white} />
         <Text fontSize={20} color={colors.white}>
           {formatName(route?.params?.name)}
