@@ -1,36 +1,34 @@
 import LottieBox from 'lottie-react-native';
-import React, {useRef, useEffect, useState} from 'react';
+import React, {useRef, useEffect, useState, useMemo, useCallback} from 'react';
 import {
-  FlatList,
+  SectionList,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Image,
   Platform,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
 } from 'react-native';
 import {IMAGE_ICON, SEND_ICON} from '../../../assets/animation';
-import {formatTime} from '../../../utils/date';
 import {CustomChatViewProps, CustomMessage} from '../types';
 import {Box} from '../../../components/common/Layout/Box';
 import {colors} from '../../../theme/colors';
 import {Text} from '../../../components/common/Text/Text';
 import ImageModal from './ImageModal';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import MessageItem from './MessageItem';
+import { formatDateHeader } from '../helper'; 
 
 export const CustomChatView: React.FC<CustomChatViewProps> = ({
   messages,
   currentUserId,
-  currentUserName = 'Tôi',
   onSend,
   onImagePress,
   placeholder = 'Nhập tin nhắn...',
   showImageButton = true,
 }) => {
   const [inputText, setInputText] = React.useState('');
-  const flatListRef = useRef<FlatList>(null);
+  const sectionListRef = useRef<SectionList>(null);
   const animation = useRef<LottieBox>(null);
   const [modalVisible, setModalVisible] = React.useState(false);
   const [selectedImage, setSelectedImage] = React.useState<string | undefined>(
@@ -38,7 +36,32 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
   );
   const insets = useSafeAreaInsets();
   const [paddingBottom, setPaddingBottom] = useState(20);
-  useEffect(() => {   
+
+  // Nhóm messages theo ngày
+  const groupedMessages = useMemo(() => {
+    const groups: {[key: string]: CustomMessage[]} = {};
+
+    messages.forEach(message => {
+      const date = new Date(message.createdAt);
+      const dateKey = date.toISOString().split('T')[0];
+
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(message);
+    });
+
+    // Chuyển thành array of sections và sắp xếp theo ngày giảm dần
+    return Object.keys(groups)
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+      .map(dateKey => ({
+        title: formatDateHeader(dateKey),
+        data: groups[dateKey],
+        dateKey,
+      }));
+  }, [messages]);
+
+  useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
       if (insets.bottom === 0) {
         setPaddingBottom(50);
@@ -53,77 +76,69 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
         setPaddingBottom(30);
       }
     });
-  }, [paddingBottom]);
-  console.log('paddingBottom', paddingBottom,insets.bottom);
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [insets.bottom]);
+
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
-        flatListRef.current?.scrollToOffset({offset: 0, animated: true});
+        sectionListRef.current?.scrollToLocation({
+          sectionIndex: 0,
+          itemIndex: 0,
+          animated: true,
+        });
       }, 100);
     }
   }, [messages.length]);
 
-  const handleShowImage = (uri: string) => {
-    if (!uri) return;
+  const handleShowImage = useCallback((uri: string) => {
+    if (!uri) {
+      return;
+    }
     setSelectedImage(uri);
     setModalVisible(true);
-  };
-
-  const handleSend = () => {
-    if (inputText.trim().length === 0) return;
-
+  }, []);
+  const handleSend = useCallback(() => {
+    if (inputText.trim().length === 0) {
+      return;
+    }
     onSend(inputText.trim());
     setInputText('');
     Keyboard.dismiss();
-  };
+  }, [inputText, onSend]);
 
-  const renderMessageItem = ({item}: {item: CustomMessage}) => {
-    const isMyMessage = item.user._id === currentUserId;
-    return (
-      <Box
-        flexDirection="row"
-        mx={2}
-        justifyContent={isMyMessage ? 'flex-end' : 'flex-start'}
-        mb={10}
-        style={{maxWidth: '100%'}}
-        >
-        <Box style={{maxWidth: '80%'}}>
-          <Box
-            backgroundColor={isMyMessage ? colors.skyBlue : colors.divider}
-            p={item.image ? 5 : 16}
-            borderTopLeftRadius={20}
-            borderTopRightRadius={20}
-            borderBottomLeftRadius={isMyMessage ? 20 : 2}
-            borderBottomRightRadius={isMyMessage ? 2 : 20}
-            onPress={() => handleShowImage(item.image!)}
-            >
-            {item.image && (
-              <Image
-                source={{uri: item.image}}
-                style={{
-                  width: item.width,
-                  height: item.height,
-                  borderRadius: 12,
-                }}
-              />
-            )}
-            {item.text.length > 0 && (
-              <Text
-                style={{maxWidth:'100%'}}
-                fontSize={16}
-                color={isMyMessage ? colors.white : colors.black}>
-                {item.text}
-              </Text>
-            )}
-          </Box>
-
-          <Text style={[styles.timestamp, isMyMessage && styles.myTimestamp]}>
-            {formatTime(item.createdAt)}
+  const renderSectionHeader = useCallback(
+    ({section}: {section: any}) => (
+      <Box alignItems="center" py={12}>
+        <Box
+          backgroundColor="rgba(0,0,0,0.05)"
+          px={16}
+          py={6}
+          borderRadius={12}>
+          <Text fontSize={12} color="#666" fontWeight="bold">
+            {section.title}
           </Text>
         </Box>
       </Box>
-    );
-  };
+    ),
+    [],
+  );
+
+  const renderMessageItem = useCallback(
+    ({item}: {item: CustomMessage}) => {
+      return (
+        <MessageItem
+          item={item}
+          currentUserId={currentUserId.toString()}
+          onShowImage={handleShowImage}
+        />
+      );
+    },
+    [currentUserId, handleShowImage],
+  );
 
   return (
     <KeyboardAvoidingView
@@ -131,12 +146,14 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
       <Box flex={1} backgroundColor={colors.white}>
-        <FlatList
-          ref={flatListRef}
-          data={messages}
+        <SectionList
+          ref={sectionListRef}
+          sections={groupedMessages}
           renderItem={renderMessageItem}
+          renderSectionFooter={renderSectionHeader}
           keyExtractor={item => item._id.toString()}
           inverted
+          stickySectionHeadersEnabled={false}
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -151,10 +168,9 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
           backgroundColor={colors.white}
           borderTopColor={colors.divider}>
           {showImageButton && onImagePress && (
-            <TouchableOpacity
+            <Box
               style={styles.imageButton}
-              onPress={onImagePress}
-              activeOpacity={0.7}>
+              onPress={onImagePress}>
               <LottieBox
                 loop={true}
                 source={IMAGE_ICON}
@@ -162,10 +178,18 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
                 style={styles.icon}
                 autoPlay
               />
-            </TouchableOpacity>
+            </Box>
           )}
 
-          <Box style={styles.textInputContainer}>
+          <Box
+            flex={1}
+            backgroundColor={'#F0F0F0'}
+            borderRadius={20}
+            px={16}
+            py={4}
+            minH={40}
+            maxH={100}
+            justifyContent="center">
             <TextInput
               style={styles.textInput}
               value={inputText}
@@ -211,41 +235,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  timestamp: {
-    fontSize: 11,
-    color: '#999',
-    marginTop: 4,
-    marginLeft: 12,
-  },
-  myTimestamp: {
-    textAlign: 'right',
-    marginRight: 12,
-    marginLeft: 0,
-  },
-  inputToolbar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
-    backgroundColor: '#fff',
-  },
   imageButton: {
     width: 60,
     height: 60,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  textInputContainer: {
-    flex: 1,
-    backgroundColor: '#F0F0F0',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
-    minHeight: 40,
-    maxHeight: 100,
-    justifyContent: 'center',
   },
   textInput: {
     fontSize: 16,

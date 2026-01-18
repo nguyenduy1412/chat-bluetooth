@@ -14,6 +14,14 @@ import {Box} from '../../../components/common/Layout/Box';
 import {Text} from '../../../components/common/Text/Text';
 import {colors} from '../../../theme/colors';
 import {formatName} from '../../../features/chat/utils/formatName';
+import {UserRepository} from '@/database/repositories/UserRepository';
+import {MessageRepository} from '@/database/repositories/MessageRepository';
+import {RoomRepository} from '@/database/repositories/RoomRepository';
+import { deleteAndRecreateDatabase } from '@/database/dataSource';
+
+const userRepo = new UserRepository();
+const messageRepo = new MessageRepository();
+const roomRepo = new RoomRepository();
 
 // Interface cho device
 interface BluetoothDevice {
@@ -35,6 +43,24 @@ const ListMessageScreen = () => {
     [],
   );
 
+  const loadData = async () => {
+    try {
+      const allUsers = await userRepo.findAll();
+      const allRooms = await roomRepo.findAll();
+      const allMessages = await messageRepo.findAll();
+      console.log('📊 Data loaded:', {
+        users: allUsers.length,
+        rooms: allRooms.length,
+        messages: allMessages.length,
+      });
+    } catch (error) {
+      console.error('❌ Load data error:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
   // ✅ Kiểm tra và bật Bluetooth
   const checkAndEnableBluetooth = async () => {
     try {
@@ -359,6 +385,20 @@ const ListMessageScreen = () => {
     );
   };
 
+  const handleCreateUser = async () => {
+    // try {
+    //   const newUser = await userRepo.create({
+    //     name: `AI`,
+    //     email: `duy272496@gmail.com`,
+    //     password: 'duy123456',
+    //     idDevice: `device_${Date.now()}`,
+    //   });
+    //   console.log('✅ Created user:', newUser);
+    // } catch (error) {
+    //   console.error('❌ Error creating user:', error);
+    // }
+    await deleteAndRecreateDatabase();
+  };
   return (
     <Box
       flex={1}
@@ -479,6 +519,9 @@ const ListMessageScreen = () => {
             ) : null
           }
         />
+        <Box h={50} w={50} backgroundColor={'red'} onPress={handleCreateUser}>
+          <Text>Creat User</Text>
+        </Box>
       </Box>
     </Box>
   );

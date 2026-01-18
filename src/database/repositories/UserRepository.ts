@@ -1,0 +1,66 @@
+import { UserType } from '@/types/types';
+import {AppDataSource} from '../dataSource';
+import {User} from '../entities/User';
+import { v4 } from 'uuid';
+export class UserRepository {
+  private repository = AppDataSource.getRepository(User);
+
+  // Tạo user mới
+  async create(userData: User): Promise<UserType> {
+    userData.id = v4();
+    const user = this.repository.create(userData);
+    return await this.repository.save(user);
+  }
+
+  // Lấy tất cả users
+  async findAll(): Promise<User[]> {
+    return await this.repository.find();
+  }
+
+  // Tìm user theo ID
+  async findById(id: string): Promise<User | null> {
+    return await this.repository.findOne({where: {id}});
+  }
+
+  // Tìm user theo email
+  async findByEmail(email: string): Promise<User | null> {
+    return await this.repository.findOne({where: {email}});
+  }
+
+  // Tìm user theo device ID
+  async findByDeviceId(idDevice: string): Promise<User | null> {
+    return await this.repository.findOne({where: {idDevice}});
+  }
+
+  // Update user
+  async update(id: string, userData: Partial<User>): Promise<User | null> {
+    await this.repository.update(id, userData);
+    return await this.findById(id);
+  }
+
+  // Xóa user
+  async delete(id: string): Promise<boolean> {
+    const result = await this.repository.delete(id);
+    return !!result.affected;
+  }
+
+  // Tìm user active
+  async findActiveUsers(): Promise<User[]> {
+    return await this.repository.find({where: {isActive: true}});
+  }
+
+  // Verify password (giả định bạn sẽ hash password)
+  async verifyLogin(email: string, password: string): Promise<User | null> {
+    const user = await this.findByEmail(email);
+    if (user && user.password === password) {
+      // TODO: Nên dùng bcrypt để hash/compare password
+      return user;
+    }
+    return null;
+  }
+
+  // Update isActive status
+  async setActiveStatus(id: string, isActive: boolean): Promise<User | null> {
+    return await this.update(id, {isActive});
+  }
+}

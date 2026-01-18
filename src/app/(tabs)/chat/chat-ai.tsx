@@ -1,17 +1,7 @@
-import {StyleSheet, Alert, ActivityIndicator, StatusBar, View} from 'react-native';
+import { ActivityIndicator, StatusBar} from 'react-native';
 import React, {useCallback, useEffect, useState, useMemo, useRef} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {
-  useLLM,
-  LLAMA3_2_1B,
-  LLAMA3_2_1B_SPINQUANT,
-  LLAMA3_2_1B_QLORA,
-  LLAMA3_2_3B,
-  LLAMA3_2_3B_SPINQUANT,
-  LLAMA3_2_3B_QLORA,
-  Message,
-  MessageRole,
-} from 'react-native-executorch';
+import {Message, MessageRole} from 'react-native-executorch';
 import {CustomChatView} from '../../../features/chat/components/CustomChatView';
 import {CustomMessage} from '../../../features/chat/types';
 import {Box} from '../../../components/common/Layout/Box';
@@ -20,33 +10,17 @@ import {colors} from '../../../theme/colors';
 import {Text} from '../../../components/common/Text/Text';
 import {goBack} from '../../../utils/navigationUtils';
 import useModelStore from '../../../store/modelStore';
-
-
-const MODEL_MAP: Record<string, any> = {
-  LLAMA3_2_1B,
-  LLAMA3_2_1B_SPINQUANT,
-  LLAMA3_2_1B_QLORA,
-  LLAMA3_2_3B,
-  LLAMA3_2_3B_SPINQUANT,
-  LLAMA3_2_3B_QLORA,
-};
+import {useLLMContext} from '../../../components/provider/LLMProvider';
 
 const ChatAIScreen = () => {
   const insets = useSafeAreaInsets();
   const {activeModel, loadModels} = useModelStore();
-
-  const selectedModel = useMemo(() => {
-    if (!activeModel || !MODEL_MAP[activeModel]) {
-      return LLAMA3_2_1B;
-    }
-    return MODEL_MAP[activeModel];
-  }, [activeModel]);
-
-  const llm = useLLM({model: selectedModel});
-  
+  const llm = useLLMContext();
+  console.log('🚀 ChatAIScreen rendered, LLM isReady:', llm.isReady);
   const [messages, setMessages] = useState<CustomMessage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [streamingMessage, setStreamingMessage] = useState<CustomMessage | null>(null);
+  const [streamingMessage, setStreamingMessage] =
+    useState<CustomMessage | null>(null);
   const currentAiMessageIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -69,7 +43,6 @@ const ChatAIScreen = () => {
     }
   }, [llm.response, isGenerating]);
 
-
   useEffect(() => {
     if (!llm.isGenerating && isGenerating && streamingMessage) {
       setMessages(prev => [streamingMessage, ...prev]);
@@ -80,7 +53,6 @@ const ChatAIScreen = () => {
     }
   }, [llm.isGenerating, isGenerating, streamingMessage]);
 
-  
   const handleSendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || !llm.isReady || llm.isGenerating) {
@@ -105,13 +77,14 @@ const ChatAIScreen = () => {
 
       setMessages(prev => {
         setIsGenerating(true);
-        
         const conversationHistory: Message[] = [
           ...prev
             .slice()
             .reverse()
             .map(msg => ({
-              role: (msg.user._id === 'ai' ? 'assistant' : 'user') as MessageRole,
+              role: (msg.user._id === 'ai'
+                ? 'assistant'
+                : 'user') as MessageRole,
               content: msg.text,
             })),
           {
@@ -120,15 +93,15 @@ const ChatAIScreen = () => {
           },
         ];
 
-        llm.generate(conversationHistory).catch(error => {
-          console.error('❌ AI Generate error:', error);
+        llm.generate(conversationHistory).catch((error: any) => {
           setIsGenerating(false);
           setStreamingMessage(null);
           currentAiMessageIdRef.current = null;
-          
           const errorMessage: CustomMessage = {
             _id: `error_${Date.now()}`,
-            text: `Lỗi: ${error instanceof Error ? error.message : 'Không thể tạo phản hồi'}`,
+            text: `Lỗi: ${
+              error instanceof Error ? error.message : 'Không thể tạo phản hồi'
+            }`,
             createdAt: new Date(),
             user: {
               _id: 0,
@@ -136,7 +109,6 @@ const ChatAIScreen = () => {
             },
             system: true,
           };
-          
           setMessages(prevMsgs => [errorMessage, ...prevMsgs]);
         });
 
@@ -147,7 +119,9 @@ const ChatAIScreen = () => {
   );
 
   const statusText = useMemo(() => {
-    return `${activeModel || 'LLAMA3_2_1B'} • ${llm.isGenerating ? '⏳ Đang trả lời...' : '✅ Sẵn sàng'}`;
+    return `${activeModel || 'LLAMA3_2_1B'} • ${
+      llm.isGenerating ? '⏳ Đang trả lời...' : '✅ Sẵn sàng'
+    }`;
   }, [activeModel, llm.isGenerating]);
 
   if (!llm.isReady) {
@@ -172,22 +146,22 @@ const ChatAIScreen = () => {
 
         <Box flex={1} justifyContent="center" alignItems="center" px={20}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Box style={{marginTop: 16}}>
+          <Box mt={16}>
             <Text fontSize={16} color={colors.text} fontWeight="semibold">
               Đang tải model AI...
             </Text>
           </Box>
-          <Box style={{marginTop: 8}}>
+          <Box mt={8}>
             <Text fontSize={14} color={colors.textSecondary}>
               {Math.round(llm.downloadProgress * 100)}%
             </Text>
           </Box>
-          <Box style={{marginTop: 8}}>
+          <Box mt={8}>
             <Text fontSize={12} color={colors.textSecondary} align="center">
               Model: {activeModel || 'LLAMA3_2_1B'}
             </Text>
           </Box>
-          <Box style={{marginTop: 4}}>
+          <Box mt={4}>
             <Text fontSize={12} color={colors.textSecondary} align="center">
               Chỉ cần tải một lần, sau đó dùng offline!
             </Text>
@@ -198,7 +172,7 @@ const ChatAIScreen = () => {
   }
 
   return (
-    <Box style={styles.container}>
+    <Box flex={1} backgroundColor={colors.white}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <Box
         pt={insets.top + 10}
@@ -253,10 +227,3 @@ const ChatAIScreen = () => {
 };
 
 export default ChatAIScreen;
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-});

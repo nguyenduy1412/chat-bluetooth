@@ -1,18 +1,25 @@
-export type User = {
+export interface UserType {
   id: string;
-  clerkId: string;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-  name: string | null;
+
+  name: string;
+
+  idDevice?: string | null;
+
   email: string;
-  phone: string;
-  avatarUrl: string | null;
-  language: string | null;
-  companyId: string | null;
-  roleId: string;
-  locationId: string | null;
-};
+
+  password: string;
+
+  createdAt: Date;
+
+  updatedAt: Date;
+
+  isActive: boolean;
+
+  image?: string | null;
+
+  birthday?: string | null;
+
+}
 
 export type Location = {
   id: string;
@@ -39,27 +46,6 @@ export type Event = {
   location: Location;
 };
 
-export type EventRequest = {
-  id: string;
-  eventId: string;
-  userId: string;
-  createdAt: string;
-  targetUserId: string;
-  status: string;
-  user: User;
-  targetUser: User;
-  event: Event;
-};
-export type FriendRequest = {
-  id: string;
-  userId: string;
-  targetUserId: string;
-  createdAt: string;
-  status: string;
-  user: User;
-  targetUser: User;
-};
-
 export type Coordinates = {
   lat: number;
   lng: number;
@@ -77,3 +63,4 @@ export interface Message {
   dataProgress?: number;
   dataStatus?: "sending" | "receiving" | "completed" | "failed";
 }
+

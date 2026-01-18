@@ -1,0 +1,12 @@
+diff --git a/node_modules/typeorm/package.json b/node_modules/typeorm/package.json
+index eb6c3bd..3d4d199 100644
+--- a/node_modules/typeorm/package.json
++++ b/node_modules/typeorm/package.json
+@@ -17,6 +17,7 @@
+     "email": "maintainers@typeorm.io"
+   },
+   "exports": {
++    "./package.json": "./package.json",
+     ".": {
+       "types": "./index.d.ts",
+       "react-native": {
