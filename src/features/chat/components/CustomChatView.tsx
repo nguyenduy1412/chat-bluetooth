@@ -9,24 +9,44 @@ import {
   Keyboard,
   KeyboardAvoidingView,
 } from 'react-native';
+import {dayjs} from '@/utils/date';
 import {IMAGE_ICON, SEND_ICON} from '../../../assets/animation';
-import {CustomChatViewProps, CustomMessage} from '../types';
 import {Box} from '../../../components/common/Layout/Box';
 import {colors} from '../../../theme/colors';
 import {Text} from '../../../components/common/Text/Text';
 import ImageModal from './ImageModal';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import MessageItem from './MessageItem';
-import { formatDateHeader } from '../helper'; 
-
-export const CustomChatView: React.FC<CustomChatViewProps> = ({
+import {formatDateHeader} from '../helper';
+import {MessageEntity} from '@/database/entities/MessageEntity';
+import AnimationThingking from './AnimationThingking';
+type CustomChatViewProps = {
+  messages: MessageEntity[];
+  currentUserId: string | number;
+  currentUserName?: string;
+  onSend: (text: string) => void;
+  onImagePress?: () => void;
+  placeholder?: string;
+  showImageButton?: boolean;
+  isTyping?: boolean;
+  highlightedMessageId?: string;
+  scrollToMessageId?: string;
+  hideInput?: boolean;
+  onDeleteMessage?: (messageId: string) => void;
+};
+export const CustomChatView = ({
   messages,
   currentUserId,
   onSend,
   onImagePress,
   placeholder = 'Nhập tin nhắn...',
   showImageButton = true,
-}) => {
+  isTyping = false,
+  highlightedMessageId,
+  scrollToMessageId,
+  hideInput = false,
+  onDeleteMessage,
+}: CustomChatViewProps) => {
   const [inputText, setInputText] = React.useState('');
   const sectionListRef = useRef<SectionList>(null);
   const animation = useRef<LottieBox>(null);
@@ -36,14 +56,14 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
   );
   const insets = useSafeAreaInsets();
   const [paddingBottom, setPaddingBottom] = useState(20);
+  const previousMessageCountRef = useRef(messages.length);
 
-  // Nhóm messages theo ngày
   const groupedMessages = useMemo(() => {
-    const groups: {[key: string]: CustomMessage[]} = {};
+    const groups: {[key: string]: MessageEntity[]} = {};
 
     messages.forEach(message => {
-      const date = new Date(message.createdAt);
-      const dateKey = date.toISOString().split('T')[0];
+      const localDate = dayjs(message.createdAt);
+      const dateKey = localDate.format('YYYY-MM-DD');
 
       if (!groups[dateKey]) {
         groups[dateKey] = [];
@@ -51,9 +71,9 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
       groups[dateKey].push(message);
     });
 
-    // Chuyển thành array of sections và sắp xếp theo ngày giảm dần
+    
     return Object.keys(groups)
-      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+      .sort((a, b) => dayjs(b).diff(dayjs(a)))
       .map(dateKey => ({
         title: formatDateHeader(dateKey),
         data: groups[dateKey],
@@ -82,8 +102,13 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
     };
   }, [insets.bottom]);
 
+  
   useEffect(() => {
-    if (messages.length > 0) {
+    const currentLength = messages.length;
+    const previousLength = previousMessageCountRef.current;
+    
+    
+    if (currentLength > previousLength && currentLength > 0) {
       setTimeout(() => {
         sectionListRef.current?.scrollToLocation({
           sectionIndex: 0,
@@ -92,7 +117,41 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
         });
       }, 100);
     }
+    
+    
+    previousMessageCountRef.current = currentLength;
   }, [messages.length]);
+
+  
+  useEffect(() => {
+    if (scrollToMessageId && groupedMessages.length > 0) {
+      
+      let foundSectionIndex = -1;
+      let foundItemIndex = -1;
+
+      for (let sectionIndex = 0; sectionIndex < groupedMessages.length; sectionIndex++) {
+        const itemIndex = groupedMessages[sectionIndex].data.findIndex(
+          msg => msg.id === scrollToMessageId
+        );
+        if (itemIndex !== -1) {
+          foundSectionIndex = sectionIndex;
+          foundItemIndex = itemIndex;
+          break;
+        }
+      }
+
+      if (foundSectionIndex !== -1 && foundItemIndex !== -1) {
+        setTimeout(() => {
+          sectionListRef.current?.scrollToLocation({
+            sectionIndex: foundSectionIndex,
+            itemIndex: foundItemIndex,
+            animated: true,
+            viewPosition: 0.5, 
+          });
+        }, 100);
+      }
+    }
+  }, [scrollToMessageId, groupedMessages]);
 
   const handleShowImage = useCallback((uri: string) => {
     if (!uri) {
@@ -126,18 +185,19 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
     ),
     [],
   );
-
   const renderMessageItem = useCallback(
-    ({item}: {item: CustomMessage}) => {
+    ({item}: {item: MessageEntity}) => {
       return (
         <MessageItem
           item={item}
           currentUserId={currentUserId.toString()}
           onShowImage={handleShowImage}
+          isHighlighted={item.id === highlightedMessageId}
+          onDeleteMessage={onDeleteMessage}
         />
       );
     },
-    [currentUserId, handleShowImage],
+    [currentUserId, handleShowImage, highlightedMessageId, onDeleteMessage],
   );
 
   return (
@@ -151,45 +211,46 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
           sections={groupedMessages}
           renderItem={renderMessageItem}
           renderSectionFooter={renderSectionHeader}
-          keyExtractor={item => item._id.toString()}
+          keyExtractor={item => item.id.toString()}
           inverted
           stickySectionHeadersEnabled={false}
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         />
-
-        <Box
-          flexDirection="row"
-          alignItems="flex-end"
-          p={8}
-          pb={paddingBottom}
-          borderTopWidth={1}
-          backgroundColor={colors.white}
-          borderTopColor={colors.divider}>
-          {showImageButton && onImagePress && (
-            <Box
-              style={styles.imageButton}
-              onPress={onImagePress}>
-              <LottieBox
-                loop={true}
-                source={IMAGE_ICON}
-                ref={animation}
-                style={styles.icon}
-                autoPlay
-              />
-            </Box>
-          )}
-
+        {isTyping && (
+          <AnimationThingking size={10} color={'#90949c'} duration={1000} />
+        )}
+        {!hideInput && (
           <Box
-            flex={1}
-            backgroundColor={'#F0F0F0'}
-            borderRadius={20}
-            px={16}
-            py={4}
-            minH={40}
-            maxH={100}
-            justifyContent="center">
+            flexDirection="row"
+            alignItems="flex-end"
+            p={8}
+            pb={paddingBottom}
+            borderTopWidth={1}
+            backgroundColor={colors.white}
+            borderTopColor={colors.divider}>
+            {showImageButton && onImagePress && (
+              <Box style={styles.imageButton} onPress={onImagePress}>
+                <LottieBox
+                  loop={true}
+                  source={IMAGE_ICON}
+                  ref={animation}
+                  style={styles.icon}
+                  autoPlay
+                />
+              </Box>
+            )}
+
+            <Box
+              flex={1}
+              backgroundColor={'#F0F0F0'}
+              borderRadius={20}
+              px={16}
+              py={4}
+              minH={40}
+              maxH={100}
+              justifyContent="center">
             <TextInput
               style={styles.textInput}
               value={inputText}
@@ -218,6 +279,7 @@ export const CustomChatView: React.FC<CustomChatViewProps> = ({
             />
           </TouchableOpacity>
         </Box>
+        )}
       </Box>
       <ImageModal
         visible={modalVisible}

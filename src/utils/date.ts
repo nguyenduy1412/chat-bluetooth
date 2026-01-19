@@ -7,6 +7,9 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(relativeTime);
 
+// Export configured dayjs instance
+export { dayjs };
+
 export const formatEventTime = (startedAt: string, endedAt: string): string => {
   const start = dayjs(startedAt);
   const end = dayjs(endedAt);
@@ -45,8 +48,7 @@ export const isFuture = (date: string | Date): boolean => {
   return dayjs(date).isAfter(dayjs());
 };
 
-export const formatTime = (date: Date) => {
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
+export const formatTime = (date: Date | string) => {
+  // Sử dụng múi giờ local của máy
+  return dayjs(date).format('HH:mm');
 };

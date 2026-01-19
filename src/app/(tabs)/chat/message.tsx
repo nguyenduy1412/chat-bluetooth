@@ -2,22 +2,21 @@ import {StyleSheet, Alert, ActivityIndicator, StatusBar} from 'react-native';
 import React, {useCallback, useEffect, useState, useRef} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import BluetoothModule from '../../../assets/managers/BluetoothModule';
-import {Message} from '../../../types/types';
 import {launchImageLibrary} from 'react-native-image-picker';
 import ImageResizer from 'react-native-image-resizer';
 import RNFS from 'react-native-fs';
 import {requestPermissions} from '../../../utils/permission';
 import {CustomChatView} from '../../../features/chat/components/CustomChatView';
-import {CustomMessage} from '../../../features/chat/types';
 import {getSizeImage} from '../../../utils/getSizeImage';
 import {Box} from '../../../components/common/Layout/Box';
-import {ArrowLeft, BackpackIcon} from 'lucide-react-native';
+import {ArrowLeft} from 'lucide-react-native';
 import {colors} from '../../../theme/colors';
 import {Text} from '../../../components/common/Text/Text';
 import { goBack, navigate } from '../../../utils/navigationUtils';
 import { formatName } from '../../../features/chat/utils/formatName';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { RootNavigatorParamList } from '../../../types/navigation-type';
+import { MessageEntity } from '@/database/entities/MessageEntity';
 
 interface BluetoothDevice {
   name: string;
@@ -29,7 +28,7 @@ type DeviceProp={
 }
 const MessageScreen = () => {
   const route = useRoute<RouteProp<RootNavigatorParamList, 'MessageScreen'>>();
-  const [messages, setMessages] = useState<CustomMessage[]>([]);
+  const [messages, setMessages] = useState<MessageEntity[]>([]);
   const [bluetoothName, setBluetoothName] = useState<string>('');
   const [bluetoothAddress, setBluetoothAddress] = useState<string>('');
   const [connectedDevices, setConnectedDevices] = useState<BluetoothDevice[]>(
@@ -110,14 +109,15 @@ const MessageScreen = () => {
     BluetoothModule.addEventListener('onImageReceived', data => {
       console.log('📸 Image received:', data.filePath);
       addMessage({
-        _id: `img_${Date.now()}`,
-        text: '',
+        id: `img_${Date.now()}`,
+        message: `file://${data.filePath}`,
         createdAt: new Date(),
-        user: {
-          _id: data.deviceAddress,
+        createdBy: {
+          id: data.deviceAddress,
           name: data.deviceName,
         },
-        image: `file://${data.filePath}`,
+        type: 'image',
+        roomId: route?.params?.roomId || '',
       });
     });
   };
@@ -137,14 +137,15 @@ const MessageScreen = () => {
     } else {
       // Tin nhắn text thông thường
       addMessage({
-        _id: `${senderAddress}_${Date.now()}`,
-        text: message,
+        id: `${senderAddress}_${Date.now()}`,
+        message: message,
         createdAt: new Date(),
-        user: {
-          _id: senderAddress,
+        createdBy: {
+          id: senderAddress,
           name: senderName,
-          avatar: undefined,
         },
+        type: 'text',
+        roomId: route?.params?.roomId || '',
       });
     }
   };
@@ -173,13 +174,15 @@ const MessageScreen = () => {
 
     // Thêm message placeholder
     addMessage({
-      _id: messageId,
-      text: '📷 Đang nhận ảnh...',
+      id: messageId,
+      message: '📷 Đang nhận ảnh...',
       createdAt: new Date(timestamp),
-      user: {
-        _id: senderAddress,
+      createdBy: {
+        id: senderAddress,
         name: senderName,
       },
+      type: 'text',
+      roomId: route?.params?.roomId || '',
     });
   };
 
@@ -214,8 +217,8 @@ const MessageScreen = () => {
     // Cập nhật progress
     setMessages(prev =>
       prev.map(msg =>
-        msg._id === messageId
-          ? {...msg, text: `📷 Đang nhận ảnh... ${progress}%`}
+        msg.id === messageId
+          ? {...msg, message: `📷 Đang nhận ảnh... ${progress}%`}
           : msg,
       ),
     );
@@ -249,10 +252,10 @@ const MessageScreen = () => {
     // Cập nhật message với ảnh
     setMessages(prev =>
       prev.map(msg =>
-        msg._id === messageId
+        msg.id === messageId
           ? {
               ...msg,
-              text: '',
+              message: '',
               image: `data:image/jpeg;base64,${base64Image}`,
               width,
               height,
@@ -265,21 +268,21 @@ const MessageScreen = () => {
     delete imageChunksRef.current[messageId];
   };
 
-  const addMessage = (message: CustomMessage) => {
+  const addMessage = (message: MessageEntity) => {
     setMessages(previousMessages => [message, ...previousMessages]);
   };
 
   const addSystemMessage = (text: string) => {
-    addMessage({
-      _id: `system_${Date.now()}`,
-      text,
-      createdAt: new Date(),
-      user: {
-        _id: 0,
-        name: 'System',
-      },
-      system: true,
-    });
+    // addMessage({
+    //   id: `system_${Date.now()}`,
+    //   message: text,
+    //   createdAt: new Date(),
+    //   user: {
+    //     _id: 0,
+    //     name: 'System',
+    //   },
+    //   system: true,
+    // });
   };
 
   const handleSendMessage = async (text: string) => {
@@ -291,14 +294,16 @@ const MessageScreen = () => {
       return;
     }
 
-    const newMessage: CustomMessage = {
-      _id: `msg_${Date.now()}`,
-      text: text,
+    const newMessage: MessageEntity = {
+      id: `msg_${Date.now()}`,
+      message: text,
       createdAt: new Date(),
-      user: {
-        _id: bluetoothAddress || 'me',
+      createdBy: {
+        id: bluetoothAddress || 'me',
         name: bluetoothName || 'Tôi',
       },
+      roomId: route?.params?.roomId || '',
+      type: 'text',
     };
 
     try {
@@ -379,16 +384,17 @@ const MessageScreen = () => {
         );
 
         addMessage({
-          _id: messageId,
-          text: '',
+          id: messageId,
+          message: '',
           createdAt: new Date(timestamp),
-          user: {
-            _id: bluetoothAddress || 'me',
+          createdBy: {
+            id: bluetoothAddress || 'me',
             name: bluetoothName || 'Tôi',
           },
-          image: `data:image/jpeg;base64,${base64Image}`,
+          type: 'image',
           width,
           height,
+          roomId: route?.params?.roomId || '',
         });
 
         const TOTAL_CHUNKS = 10;

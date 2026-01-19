@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useCallback} from 'react';
+import {useEffect, useState, useCallback} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,14 +14,9 @@ import {Box} from '../../../components/common/Layout/Box';
 import {Text} from '../../../components/common/Text/Text';
 import {colors} from '../../../theme/colors';
 import {formatName} from '../../../features/chat/utils/formatName';
-import {UserRepository} from '@/database/repositories/UserRepository';
-import {MessageRepository} from '@/database/repositories/MessageRepository';
-import {RoomRepository} from '@/database/repositories/RoomRepository';
-import { deleteAndRecreateDatabase } from '@/database/dataSource';
-
-const userRepo = new UserRepository();
-const messageRepo = new MessageRepository();
-const roomRepo = new RoomRepository();
+import { getUserByAttributes } from '@/features/auth/api/getUserByAttributes';
+import { getRoomByMember } from '@/features/chat/api/getRoomByMember';
+import { userStore } from '@/store/userStore';
 
 // Interface cho device
 interface BluetoothDevice {
@@ -42,17 +37,9 @@ const ListMessageScreen = () => {
   const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>(
     [],
   );
-
+  const {user} = userStore();
   const loadData = async () => {
     try {
-      const allUsers = await userRepo.findAll();
-      const allRooms = await roomRepo.findAll();
-      const allMessages = await messageRepo.findAll();
-      console.log('📊 Data loaded:', {
-        users: allUsers.length,
-        rooms: allRooms.length,
-        messages: allMessages.length,
-      });
     } catch (error) {
       console.error('❌ Load data error:', error);
     }
@@ -207,7 +194,7 @@ const ListMessageScreen = () => {
         });
         navigate('ChatStack', {
           screen: 'Message',
-          params: { name: info.deviceName}
+          params: {name: info.deviceName},
         });
       },
     );
@@ -339,7 +326,7 @@ const ListMessageScreen = () => {
     } else {
       navigate('ChatStack', {
         screen: 'Message',
-        params: { name: item.name }
+        params: {name: item.name},
       });
     }
   };
@@ -397,7 +384,22 @@ const ListMessageScreen = () => {
     // } catch (error) {
     //   console.error('❌ Error creating user:', error);
     // }
-    await deleteAndRecreateDatabase();
+    // await deleteAndRecreateDatabase();
+    // const res = await userRepo.findAll();
+    // console.log('id', res[0].createdAt)
+  };
+  const handleChatAI = async () => {
+    const ai = await getUserByAttributes({ system: true });
+    console.log('ai', ai);
+    if(!user?.id || !ai?.id) return;
+    const room = await getRoomByMember(user?.id,ai?.id)
+    navigate('ChatStack', {
+      screen: 'ChatAIScreen',
+      params:{
+        roomId:room.id,
+        receiver: ai
+      }
+    });
   };
   return (
     <Box
@@ -481,12 +483,7 @@ const ListMessageScreen = () => {
           }
           ListHeaderComponent={
             <TouchableOpacity
-              onPress={() => {
-                navigate('ChatStack', {
-                  screen:'ChatAI'
-                }
-                )
-              }}>
+              onPress={handleChatAI}>
               <Box
                 backgroundColor="white"
                 p={16}
@@ -498,7 +495,7 @@ const ListMessageScreen = () => {
                   <Text fontSize={17} fontWeight="bold" color="#333">
                     AI
                   </Text>
-                </Box> 
+                </Box>
               </Box>
             </TouchableOpacity>
           }

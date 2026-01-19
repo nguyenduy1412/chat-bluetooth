@@ -1,3 +1,5 @@
+import { User } from "@/database/entities/User";
+
 export type RootNavigatorParamList = {
   AuthStack: undefined;
   TabStack: undefined;
@@ -5,6 +7,11 @@ export type RootNavigatorParamList = {
   SettingStack: NavigatorScreenParams<SettingsStackParamList>
   MessageScreen:{
     name?:string;
+    roomId?: string;
+  }
+  ChatAIScreen:{
+    roomId?: string;
+    receiver?: User;
   }
   
   UserStack: undefined;

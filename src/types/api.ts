@@ -1,4 +1,4 @@
-// import type { UseMutationOptions } from '@tanstack/react-query';
+import type { UseQueryOptions } from "@tanstack/react-query";
 
 // export type EntityBase = {
 //   id?: string;
@@ -39,3 +39,8 @@
 //   FORM_URLENCODED = 'application/x-www-form-urlencoded;charset=UTF-8',
 //   FORM_DATA = 'multipart/form-data',
 // }
+
+export type QueryConfig<T extends (...args: any[]) => any> = Omit<
+  UseQueryOptions<Awaited<ReturnType<T>>, Error>,
+  'queryKey' | 'queryFn'
+>;
