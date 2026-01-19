@@ -14,18 +14,17 @@ export const LLMProvider = ({children}: {children: React.ReactNode}) => {
   const hasInitialized = useRef(false);
 
   console.log('🚀 LLMProvider using fixed model:', SELECTED_MODEL);
-  // const llm = useLLM({model: SELECTED_MODEL});
-  const llm = null;
+  const llm = useLLM({model: SELECTED_MODEL});
   // console.log('🚀 LLMProvider rendered, LLM isReady:', llm.isReady);
 
-  // useEffect(() => {
-  //   // Chỉ initialize một lần
-  //   if (llm && !hasInitialized.current) {
-  //     hasInitialized.current = true;
-  //     setIsInitialized(true);
-  //     console.log('🚀 LLM initialized successfully');
-  //   }
-  // }, [llm]);
+  useEffect(() => {
+    // Chỉ initialize một lần
+    if (llm && !hasInitialized.current) {
+      hasInitialized.current = true;
+      setIsInitialized(true);
+      console.log('🚀 LLM initialized successfully');
+    }
+  }, [llm]);
 
   // Nếu chưa initialized, return null context để tránh lỗi
   const contextValue = isInitialized ? llm : null;

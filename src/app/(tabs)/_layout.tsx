@@ -1,39 +1,78 @@
-import React, { useEffect, useReducer, useRef } from "react";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import {useEffect} from 'react';
+import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
-import Lottie from "lottie-react-native";
-import { StyleSheet } from "react-native";
+import Lottie from 'lottie-react-native';
+import {StyleSheet} from 'react-native';
 
-
-import ChatLayout from "./chat/_layout";
-
-import HomeScreen from ".";
-import { AnimatedTabBar } from "../../components/navigation/AnimatedTabBar";
-import { CHAT_ICON, HOME_ICON, SETTINGS_ICON, UPLOAD_ICON } from "../../assets/animation";
-import { Box } from "lucide-react-native";
-import { Text } from "react-native-gesture-handler";
-import ListMessageScreen from "./chat";
-import SettingsScreen from "./settings";
-import MapScreen from "./map";
-import useModelStore from "../../store/modelStore";
-import useProfileStore from "../../store/profileStore";
+import HomeScreen from '.';
+import {AnimatedTabBar} from '../../components/navigation/AnimatedTabBar';
+import {
+  CHAT_ICON,
+  HOME_ICON,
+  SETTINGS_ICON,
+  UPLOAD_ICON,
+} from '../../assets/animation';
+import ListMessageScreen from './chat';
+import SettingsScreen from './settings';
+import MapScreen from './map';
+import useModelStore from '../../store/modelStore';
+import {userStore} from '@/store/userStore';
+import {useCreateUser} from '@/features/auth/hooks/useCreateUser';
+import {ensureDatabase} from '@/database/dataSource';
+import {getUserByAttributes} from '@/features/auth/api/getUserByAttributes';
+import { getAllUser } from '@/features/auth/api/getAllUser';
+import { MessageRepository } from '@/database/repositories/MessageRepository';
 
 const Tab = createBottomTabNavigator();
 
 export default function TabStack() {
   const {loadModels} = useModelStore();
-  const {loadProfile} = useProfileStore();
+  const {user, setUser} = userStore();
+  const {mutateAsync: createUser, isPending} = useCreateUser();
+
   useEffect(() => {
-    loadModels();
-    loadProfile();
+    const initialize = async () => {
+      try {
+
+        loadModels();
+        await ensureDatabase();
+        console.log('✅ Database ready', user);
+        const listUser= await getAllUser();
+        const messageRepo = new MessageRepository();
+        const allMessages = await messageRepo.findAll();
+        console.log('✅ All messages:', allMessages);
+        console.log('✅ List users:', listUser);
+        if (user) {
+          const userDB = await getUserByAttributes({idDevice: user?.idDevice});
+          console.log('userDB', userDB);
+          if (!userDB) {
+            console.log('Creating new user...');
+            await createUser(user);
+          } else {
+            setUser(userDB);
+          }
+        } else {
+          console.log('Creating new user2...');
+            const res = await createUser({
+              name: 'BLEUser',
+            });
+            console.log('✅ User created:', res);
+            setUser(res);
+          }
+      } catch (error) {
+        console.error('❌ Initialization error:', error);
+      }
+    };
+
+    initialize();
   }, []);
   return (
-    <Tab.Navigator tabBar={(props) => <AnimatedTabBar {...props} />}>
+    <Tab.Navigator tabBar={props => <AnimatedTabBar {...props} />}>
       <Tab.Screen
         name="Home"
         options={{
           // @ts-ignore
-          tabBarIcon: ({ ref }) => (
+          tabBarIcon: ({ref}) => (
             <Lottie
               ref={ref}
               loop={false}
@@ -49,7 +88,7 @@ export default function TabStack() {
         name="Upload"
         options={{
           // @ts-ignore
-          tabBarIcon: ({ ref }) => (
+          tabBarIcon: ({ref}) => (
             <Lottie
               ref={ref}
               loop={false}
@@ -65,7 +104,7 @@ export default function TabStack() {
         name="Chat"
         options={{
           // @ts-ignore
-          tabBarIcon: ({ ref }) => (
+          tabBarIcon: ({ref}) => (
             <Lottie
               ref={ref}
               loop={false}
@@ -81,7 +120,7 @@ export default function TabStack() {
         name="Settings"
         options={{
           // @ts-ignore
-          tabBarIcon: ({ ref }) => (
+          tabBarIcon: ({ref}) => (
             <Lottie
               ref={ref}
               loop={false}
@@ -96,12 +135,6 @@ export default function TabStack() {
     </Tab.Navigator>
   );
 }
-
-const PlaceholderScreen = () => {
-  return <Box style={{ flex: 1, backgroundColor: "white" }}>
-    <Text>áldfdfdf</Text>
-  </Box>;
-};
 
 const styles = StyleSheet.create({
   icon: {

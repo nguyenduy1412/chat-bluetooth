@@ -14,13 +14,18 @@ import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import RootNavigation from './src/components/navigation/RootNavigation';
 import initI18n from './src/i18n/config';
 import {LLMProvider} from './src/components/provider/LLMProvider';
-import {initDatabase} from './src/database/dataSource';
-
+import {
+  initDatabase,
+  deleteAndRecreateDatabase,
+} from './src/database/dataSource';
+import 'react-native-get-random-values';
+import {QueryClientProvider} from '@tanstack/react-query';
+import {queryClient} from '@/lib/react-query';
 initI18n();
 
 function App(): React.JSX.Element {
   useEffect(() => {
-    // Khởi tạo database 1 lần duy nhất khi app start
+    // Initialize database without deleting existing data
     initDatabase()
       .then(() => console.log('✅ Database initialized'))
       .catch(error => console.error('❌ Database init error:', error));
@@ -28,11 +33,13 @@ function App(): React.JSX.Element {
 
   return (
     <GestureHandlerRootView style={{flex: 1}}>
-      <LLMProvider>
-        <BottomSheetModalProvider>
-          <RootNavigation />
-        </BottomSheetModalProvider>
-      </LLMProvider>
+      <QueryClientProvider client={queryClient}>
+        <LLMProvider>
+          <BottomSheetModalProvider>
+            <RootNavigation />
+          </BottomSheetModalProvider>
+        </LLMProvider>
+      </QueryClientProvider>
     </GestureHandlerRootView>
   );
 }

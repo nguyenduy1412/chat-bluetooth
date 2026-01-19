@@ -1,11 +1,12 @@
-
 import { v4 } from 'uuid';
 import {AppDataSource} from '../dataSource';
 import {Room} from '../entities/Room';
 
-
 export class RoomRepository {
-  private repository = AppDataSource.getRepository(Room);
+  // Lazy load repository - chỉ lấy khi cần để tránh lỗi khi DB chưa init
+  private get repository() {
+    return AppDataSource.getRepository(Room);
+  }
 
   // Tạo room mới
   async create(roomData: Room): Promise<Room> {

@@ -1,17 +1,27 @@
-import { UserType } from '@/types/types';
+import {UserType} from '@/types/types';
 import {AppDataSource} from '../dataSource';
 import {User} from '../entities/User';
-import { v4 } from 'uuid';
+import {v4} from 'uuid';
+
 export class UserRepository {
-  private repository = AppDataSource.getRepository(User);
+  // Lazy load repository - chỉ lấy khi cần để tránh lỗi khi DB chưa init
+  private get repository() {
+    return AppDataSource.getRepository(User);
+  }
 
   // Tạo user mới
-  async create(userData: User): Promise<UserType> {
-    userData.id = v4();
+  async create(userData: User): Promise<User> {
     const user = this.repository.create(userData);
     return await this.repository.save(user);
   }
 
+  async updateUser(id: string, data: Partial<User>): Promise<User | null> {
+    const user = await this.repository.findOne({where: {id}});
+    if (!user) return null;
+
+    const updatedUser = this.repository.merge(user, data);
+    return await this.repository.save(updatedUser);
+  }
   // Lấy tất cả users
   async findAll(): Promise<User[]> {
     return await this.repository.find();
@@ -20,6 +30,9 @@ export class UserRepository {
   // Tìm user theo ID
   async findById(id: string): Promise<User | null> {
     return await this.repository.findOne({where: {id}});
+  }
+  async findByAttributes(object: any): Promise<User | null> {
+    return await this.repository.findOne({where: object});
   }
 
   // Tìm user theo email

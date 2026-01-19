@@ -1,60 +1,56 @@
 import { v4 } from 'uuid';
 import {AppDataSource} from '../dataSource';
-import {Message} from '../entities/Message';
+import {MessageEntity} from '../entities/MessageEntity';
 
 export class MessageRepository {
-  private repository = AppDataSource.getRepository(Message);
+  private get repository() {
+    return AppDataSource.getRepository(MessageEntity);
+  }
 
-  // Tạo message mới
-  async create(messageData: {
-    type: string;
-    message: string;
-    roomId: string;
-    created_by: string;
-    status?: string;
-    id?: string;
-  }): Promise<Message> {
-    messageData.id = v4();
+  async create(messageData: Partial<MessageEntity>): Promise<MessageEntity> {
+    if (!messageData.id) {
+      messageData.id = v4();
+    }
+    if (!messageData.created_by && messageData.createdBy?.id) {
+      messageData.created_by = messageData.createdBy.id;
+    }
     const message = this.repository.create(messageData);
     return await this.repository.save(message);
   }
 
-  // Lấy tất cả messages
-  async findAll(): Promise<Message[]> {
-    return await this.repository.find({
-      relations: ['createdBy', 'room'],
-      order: {created_at: 'DESC'},
-    });
-  }
-
   // Lấy messages của một room
-  async findByRoomId(roomId: string): Promise<Message[]> {
+  async findByRoomId(roomId: string): Promise<MessageEntity[]> {
     return await this.repository.find({
       where: {roomId},
       relations: ['createdBy', 'room'],
-      order: {created_at: 'ASC'},
+      order: {createdAt: 'DESC'},
     });
   }
 
   // Lấy messages của một user
-  async findByUserId(userId: string): Promise<Message[]> {
+  async findByUserId(userId: string): Promise<MessageEntity[]> {
     return await this.repository.find({
       where: {created_by: userId},
       relations: ['createdBy', 'room'],
-      order: {created_at: 'DESC'},
+      order: {createdAt: 'DESC'},
     });
   }
 
   // Lấy message theo ID
-  async findById(id: string): Promise<Message | null> {
+  async findById(id: string): Promise<MessageEntity | null> {
     return await this.repository.findOne({
       where: {id},
       relations: ['createdBy', 'room'],
     });
   }
+  async findAll(): Promise<MessageEntity[]> {
+    return await this.repository.find({
+      relations: ['createdBy', 'room'],
+    });
+  }
 
   // Update message status
-  async updateStatus(messageId: string, status: string): Promise<Message | null> {
+  async updateStatus(messageId: string, status: string): Promise<MessageEntity | null> {
     await this.repository.update(messageId, {status});
     return await this.findById(messageId);
   }
@@ -63,7 +59,7 @@ export class MessageRepository {
   async updateManyStatus(messageIds: string[], status: string): Promise<void> {
     await this.repository
       .createQueryBuilder()
-      .update(Message)
+      .update(MessageEntity)
       .set({status})
       .where('id IN (:...ids)', {ids: messageIds})
       .execute();
@@ -80,11 +76,11 @@ export class MessageRepository {
   }
 
   // Lấy tin nhắn cuối cùng của room
-  async getLastMessageByRoomId(roomId: string): Promise<Message | null> {
+  async getLastMessageByRoomId(roomId: string): Promise<MessageEntity | null> {
     return await this.repository.findOne({
       where: {roomId},
       relations: ['createdBy'],
-      order: {created_at: 'DESC'},
+      order: {createdAt: 'DESC'},
     });
   }
 

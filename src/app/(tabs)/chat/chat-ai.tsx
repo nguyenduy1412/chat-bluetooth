@@ -1,9 +1,8 @@
-import { ActivityIndicator, StatusBar} from 'react-native';
+import {ActivityIndicator, StatusBar, Alert} from 'react-native';
 import React, {useCallback, useEffect, useState, useMemo, useRef} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Message, MessageRole} from 'react-native-executorch';
 import {CustomChatView} from '../../../features/chat/components/CustomChatView';
-import {CustomMessage} from '../../../features/chat/types';
 import {Box} from '../../../components/common/Layout/Box';
 import {ArrowLeft} from 'lucide-react-native';
 import {colors} from '../../../theme/colors';
@@ -11,111 +10,185 @@ import {Text} from '../../../components/common/Text/Text';
 import {goBack} from '../../../utils/navigationUtils';
 import useModelStore from '../../../store/modelStore';
 import {useLLMContext} from '../../../components/provider/LLMProvider';
+import {userStore} from '@/store/userStore';
+import {MessageEntity} from '@/database/entities/MessageEntity';
+import {useCreateMessage} from '@/features/chat/hooks/useCreateMessage';
+import {useGetMessagesByRoomId} from '@/features/chat/hooks/useGetMessagesByRoomId';
+import {useDeleteMessage} from '@/features/chat/hooks/useDeleteMessage';
+import {v4} from 'uuid';
+import {RouteProp, useRoute} from '@react-navigation/native';
+import {RootNavigatorParamList} from '@/types/navigation-type';
+import HeaderChat from '@/features/chat/components/HeaderChat';
+import SearchBar from '@/features/chat/components/SearchBar';
 
 const ChatAIScreen = () => {
   const insets = useSafeAreaInsets();
-  const {activeModel, loadModels} = useModelStore();
+  const {activeModel} = useModelStore();
   const llm = useLLMContext();
-  console.log('🚀 ChatAIScreen rendered, LLM isReady:', llm.isReady);
-  const [messages, setMessages] = useState<CustomMessage[]>([]);
+  const {user} = userStore();
+  const route = useRoute<RouteProp<RootNavigatorParamList, 'ChatAIScreen'>>();
+  const {data: dbMessages, isLoading} = useGetMessagesByRoomId(
+    route?.params?.roomId,
+  );
+  const {mutateAsync: createMessage} = useCreateMessage();
+  const {mutateAsync: deleteMessage} = useDeleteMessage();
+
+  const [messages, setMessages] = useState<MessageEntity[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingMessage, setStreamingMessage] =
-    useState<CustomMessage | null>(null);
+    useState<MessageEntity | null>(null);
   const currentAiMessageIdRef = useRef<string | null>(null);
+  
+  const [isTyping, setIsTyping] = useState(false);
+  
+  // Search states
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [searchResults, setSearchResults] = useState<string[]>([]);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  
+  useEffect(() => {
+    if (dbMessages && dbMessages.length > 0) {
+      setMessages(dbMessages);
+    }
+  }, [isLoading]);
 
   useEffect(() => {
-    loadModels();
-  }, [loadModels]);
-
+    const shouldBeTyping = isGenerating && !streamingMessage;
+    setIsTyping(prev => prev !== shouldBeTyping ? shouldBeTyping : prev);
+  }, [isGenerating, streamingMessage])
+  
+  // Search logic
   useEffect(() => {
-    if (llm.response && isGenerating) {
-      if (currentAiMessageIdRef.current) {
-        setStreamingMessage({
-          _id: currentAiMessageIdRef.current,
-          text: llm.response,
-          createdAt: new Date(),
-          user: {
-            _id: 'ai',
-            name: '🤖 AI Assistant',
-          },
-        });
+    if (searchText.trim().length === 0) {
+      setSearchResults([]);
+      setCurrentSearchIndex(0);
+      return;
+    }
+
+    const results: string[] = [];
+    const searchLower = searchText.toLowerCase();
+
+    messages.forEach(msg => {
+      if (msg.message && msg.message.toLowerCase().includes(searchLower)) {
+        results.push(msg.id);
       }
+    });
+
+    setSearchResults(results);
+    setCurrentSearchIndex(0);
+  }, [searchText, messages]);
+  useEffect(() => {
+    if (llm.response && isGenerating && currentAiMessageIdRef.current) {
+      setStreamingMessage({
+        id: currentAiMessageIdRef.current,
+        message: llm.response,
+        createdAt: new Date(),
+        created_by: route.params?.receiver?.id,
+        roomId: route.params?.roomId,
+        type: 'text',
+        status: 'sent',
+      });
     }
   }, [llm.response, isGenerating]);
 
   useEffect(() => {
-    if (!llm.isGenerating && isGenerating && streamingMessage) {
-      setMessages(prev => [streamingMessage, ...prev]);
-
-      setStreamingMessage(null);
-      currentAiMessageIdRef.current = null;
-      setIsGenerating(false);
-    }
+    const saveAiResponse = async () => {
+      if (!llm.isGenerating && isGenerating && streamingMessage) {
+        try {
+          await createMessage(streamingMessage);
+          setMessages(prev => [streamingMessage, ...prev]);
+        } catch (error) {
+          console.error('Failed to save AI response:', error);
+        } finally {
+          setStreamingMessage(null);
+          currentAiMessageIdRef.current = null;
+          setIsGenerating(false);
+        }
+      }
+    };
+    saveAiResponse();
   }, [llm.isGenerating, isGenerating, streamingMessage]);
 
   const handleSendMessage = useCallback(
     async (text: string) => {
-      if (!text.trim() || !llm.isReady || llm.isGenerating) {
+      if (!text.trim() || !llm.isReady || llm.isGenerating || !user?.id) {
         return;
       }
 
       const trimmedText = text.trim();
-      const timestamp = Date.now();
 
-      const userMessage: CustomMessage = {
-        _id: `user_${timestamp}`,
-        text: trimmedText,
-        createdAt: new Date(timestamp),
-        user: {
-          _id: 'me',
-          name: 'Bạn',
-        },
-      };
+      try {
+        const newMessage = {
+          id: v4(),
+          message: trimmedText,
+          roomId: route.params?.roomId,
+          created_by: user.id,
+          type: 'text',
+          status: 'sent',
+          createdAt: new Date(),
+        } as MessageEntity;
+        console.log('newMessage', newMessage);
+        await createMessage(newMessage);
 
-      const aiMessageId = `ai_${timestamp}`;
-      currentAiMessageIdRef.current = aiMessageId;
+        // Update messages state immediately
+        setMessages(prev => [newMessage, ...prev]);
 
-      setMessages(prev => {
+        currentAiMessageIdRef.current = v4();
         setIsGenerating(true);
+
+        const MAX_CONTEXT_MESSAGES = 10;
+        const recentMessages = messages.slice(0, MAX_CONTEXT_MESSAGES);
+
+        // System prompt để AI trả lời thông minh và chuẩn hơn
+        const systemPrompt = `Bạn là trợ lý AI thông minh và hữu ích. Hãy tuân thủ các nguyên tắc sau:
+          - Trả lời tự nhiên, dễ hiểu
+          - Câu trả lời ngắn gọn, súc tích nhưng đầy đủ thông tin
+          - Lịch sự, thân thiện và chuyên nghiệp
+          - Nếu không biết, hãy thừa nhận thay vì bịa đặt
+          - Sử dụng ví dụ cụ thể khi cần giải thích
+          - Format câu trả lời rõ ràng, dễ đọc`;
+
         const conversationHistory: Message[] = [
-          ...prev
-            .slice()
-            .reverse()
-            .map(msg => ({
-              role: (msg.user._id === 'ai'
-                ? 'assistant'
-                : 'user') as MessageRole,
-              content: msg.text,
-            })),
+          // Thêm system prompt vào đầu
+          {
+            role: 'user' as MessageRole,
+            content: systemPrompt,
+          },
+          {
+            role: 'assistant' as MessageRole,
+            content: 'Tôi hiểu. Tôi sẽ trả lời theo các nguyên tắc đã nêu.',
+          },
+          // Thêm lịch sử chat gần đây
+          ...[...recentMessages].reverse().map(msg => ({
+            role: (msg.created_by === route.params?.receiver?.id
+              ? 'assistant'
+              : 'user') as MessageRole,
+            content: msg.message || '',
+          })),
           {
             role: 'user' as MessageRole,
             content: trimmedText,
           },
         ];
 
+        console.log(
+          `Using ${
+            conversationHistory.length - 3
+          } previous messages for context`,
+        );
+
         llm.generate(conversationHistory).catch((error: any) => {
+          console.error('AI generation failed:', error);
           setIsGenerating(false);
           setStreamingMessage(null);
           currentAiMessageIdRef.current = null;
-          const errorMessage: CustomMessage = {
-            _id: `error_${Date.now()}`,
-            text: `Lỗi: ${
-              error instanceof Error ? error.message : 'Không thể tạo phản hồi'
-            }`,
-            createdAt: new Date(),
-            user: {
-              _id: 0,
-              name: 'System',
-            },
-            system: true,
-          };
-          setMessages(prevMsgs => [errorMessage, ...prevMsgs]);
         });
-
-        return [userMessage, ...prev];
-      });
+      } catch (error) {
+        console.error('Failed to save user message:', error);
+      }
     },
-    [llm],
+    [llm, user, createMessage, messages],
   );
 
   const statusText = useMemo(() => {
@@ -128,21 +201,6 @@ const ChatAIScreen = () => {
     return (
       <Box flex={1} backgroundColor={colors.white}>
         <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
-        <Box
-          pt={insets.top + 10}
-          backgroundColor={colors.primary}
-          px={20}
-          pb={20}
-          gap={10}
-          flexDirection="row"
-          alignItems="center">
-          <Box onPress={goBack}>
-            <ArrowLeft color={colors.white} />
-          </Box>
-          <Text fontSize={20} color={colors.white}>
-            Chat với AI
-          </Text>
-        </Box>
 
         <Box flex={1} justifyContent="center" alignItems="center" px={20}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -171,39 +229,95 @@ const ChatAIScreen = () => {
     );
   }
 
+  const handleSearch = useCallback(() => {
+    setShowSearch(prev => !prev);
+    if (showSearch) {
+      // Close search
+      setSearchText('');
+      setSearchResults([]);
+      setCurrentSearchIndex(0);
+    }
+  }, [showSearch]);
+
+  const handleSearchPrevious = useCallback(() => {
+    if (searchResults.length > 0) {
+      setCurrentSearchIndex(prev =>
+        prev > 0 ? prev - 1 : searchResults.length - 1
+      );
+    }
+  }, [searchResults]);
+
+  const handleSearchNext = useCallback(() => {
+    if (searchResults.length > 0) {
+      setCurrentSearchIndex(prev =>
+        prev < searchResults.length - 1 ? prev + 1 : 0
+      );
+    }
+  }, [searchResults]);
+
+  const currentHighlightedMessageId = useMemo(() => {
+    return searchResults.length > 0 ? searchResults[currentSearchIndex] : undefined;
+  }, [searchResults, currentSearchIndex]);
+
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      Alert.alert(
+        'Xóa tin nhắn',
+        'Bạn có chắc chắn muốn xóa tin nhắn này?',
+        [
+          {
+            text: 'Hủy',
+            style: 'cancel',
+          },
+          {
+            text: 'Xóa',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                // Xóa từ database
+                await deleteMessage(messageId);
+                // Xóa khỏi state local
+                setMessages(prev => prev.filter(msg => msg.id !== messageId));
+              } catch (error) {
+                console.error('Failed to delete message:', error);
+                Alert.alert('Lỗi', 'Không thể xóa tin nhắn');
+              }
+            },
+          },
+        ],
+      );
+    },
+    [deleteMessage],
+  );
   return (
     <Box flex={1} backgroundColor={colors.white}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
-      <Box
-        pt={insets.top + 10}
-        backgroundColor={colors.primary}
-        px={20}
-        pb={20}
-        gap={10}
-        flexDirection="row"
-        alignItems="center">
-        <Box onPress={goBack}>
-          <ArrowLeft color={colors.white} />
-        </Box>
-        <Box flex={1}>
-          <Text fontSize={20} color={colors.white}>
-            Chat với AI
-          </Text>
-          <Text fontSize={12} color={colors.white} style={{opacity: 0.8}}>
-            {statusText}
-          </Text>
-        </Box>
-      </Box>
-
+      <HeaderChat name="AI" onSearch={handleSearch} />
+      
+      <SearchBar
+        visible={showSearch}
+        searchText={searchText}
+        onSearchTextChange={setSearchText}
+        onClose={handleSearch}
+        currentIndex={currentSearchIndex}
+        totalResults={searchResults.length}
+        onPrevious={handleSearchPrevious}
+        onNext={handleSearchNext}
+      />
+      
       <CustomChatView
         messages={streamingMessage ? [streamingMessage, ...messages] : messages}
-        currentUserId="me"
-        currentUserName="Bạn"
+        currentUserId={user?.id || 'me'}
+        currentUserName={user?.name || 'Bạn'}
         onSend={handleSendMessage}
         placeholder="Hỏi AI bất cứ điều gì..."
         showImageButton={false}
+        isTyping={isTyping}
+        highlightedMessageId={currentHighlightedMessageId}
+        scrollToMessageId={currentHighlightedMessageId}
+        hideInput={showSearch}
+        onDeleteMessage={handleDeleteMessage}
       />
-
       {isGenerating && streamingMessage && (
         <Box
           position="absolute"
@@ -217,7 +331,7 @@ const ChatAIScreen = () => {
           <Box flexDirection="row" alignItems="center" gap={8}>
             <ActivityIndicator size="small" color={colors.primary} />
             <Text fontSize={12} color={colors.textSecondary}>
-              AI đang trả lời... ({streamingMessage.text.length} ký tự)
+              AI đang trả lời... ({streamingMessage.message?.length || 0} ký tự)
             </Text>
           </Box>
         </Box>
