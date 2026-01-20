@@ -19,7 +19,7 @@ import {RootNavigatorParamList} from '../../../types/navigation-type';
 import {MessageEntity} from '@/database/entities/MessageEntity';
 import {userStore} from '@/store/userStore';
 import {useGetMessagesByRoomId} from '@/features/chat/hooks/useGetMessagesByRoomId';
-import {createMessage} from '@/features/chat/api/createMessage';
+import {useCreateMessage} from '@/features/chat/hooks/useCreateMessage';
 import {v4} from 'uuid';
 import HeaderChat from '@/features/chat/components/HeaderChat';
 
@@ -35,6 +35,7 @@ const MessageScreen = () => {
   const route = useRoute<RouteProp<RootNavigatorParamList, 'MessageScreen'>>();
   console.log('Route params:', route.params);
   const {user} = userStore();
+  const {mutateAsync: createMessage} = useCreateMessage();
   const [bluetoothName, setBluetoothName] = useState<string>('');
   const [bluetoothAddress, setBluetoothAddress] = useState<string>('');
   const [connectedDevices, setConnectedDevices] = useState<BluetoothDevice[]>(
@@ -100,14 +101,6 @@ const MessageScreen = () => {
 
   const pickImage = async () => {
     try {
-      if (connectedDevices.length === 0) {
-        Alert.alert(
-          '⚠️ Chưa kết nối',
-          'Vui lòng kết nối với thiết bị khác trước khi gửi ảnh',
-        );
-        return;
-      }
-
       const hasPermission = await requestPermissions();
       if (!hasPermission) {
         Alert.alert('⚠️ Quyền bị từ chối', 'Cần quyền truy cập ảnh');

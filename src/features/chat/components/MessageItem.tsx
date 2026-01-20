@@ -71,7 +71,10 @@ const MessageItem = ({
 
   const handleShowImage = (item: MessageEntity) => {
     if (item.type !== 'image') return;
-    onShowImage(item.message);
+    const imageUri = item.message.startsWith('data:image')
+      ? item.message
+      : `data:image/jpeg;base64,${item.message}`;
+    onShowImage(imageUri);
   };
 
   const handleDelete = () => {
@@ -148,7 +151,11 @@ const MessageItem = ({
               }}>
               {item.type === 'image' && (
                 <Image
-                  source={{uri: item.message}}
+                  source={{
+                    uri: item.message.startsWith('data:image')
+                      ? item.message
+                      : `data:image/jpeg;base64,${item.message}`,
+                  }}
                   style={{
                     width: item.width,
                     height: item.height,
@@ -156,61 +163,63 @@ const MessageItem = ({
                   }}
                 />
               )}
-              {item.message && item.message.length > 0 && (
-                <Box>
-                  {messageParts.map((part, index) => {
-                    if (part.type === 'code') {
-                      return (
-                        <Box
-                          key={index}
-                          mb={index < messageParts.length - 1 ? 8 : 0}>
-                          {part.language && (
-                            <Text
-                              fontSize={10}
-                              color={
-                                isMyMessage ? 'rgba(255,255,255,0.7)' : '#666'
-                              }
-                              fontWeight="bold">
-                              {part.language}
-                            </Text>
-                          )}
-                          <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={true}
-                            nestedScrollEnabled={true}
-                            style={{maxWidth: '100%'}}>
-                            <Box
-                              backgroundColor={
-                                isMyMessage
-                                  ? 'rgba(0,0,0,0.2)'
-                                  : 'rgba(0,0,0,0.05)'
-                              }
-                              p={12}
-                              borderRadius={8}>
+              {item.type !== 'image' &&
+                item.message &&
+                item.message.length > 0 && (
+                  <Box>
+                    {messageParts.map((part, index) => {
+                      if (part.type === 'code') {
+                        return (
+                          <Box
+                            key={index}
+                            mb={index < messageParts.length - 1 ? 8 : 0}>
+                            {part.language && (
                               <Text
-                                style={{fontFamily: 'monospace'}}
                                 fontSize={10}
-                                color={isMyMessage ? colors.white : '#000'}>
-                                {part.content}
+                                color={
+                                  isMyMessage ? 'rgba(255,255,255,0.7)' : '#666'
+                                }
+                                fontWeight="bold">
+                                {part.language}
                               </Text>
-                            </Box>
-                          </ScrollView>
-                        </Box>
-                      );
-                    } else {
-                      return (
-                        <Text
-                          key={index}
-                          style={{maxWidth: '100%'}}
-                          fontSize={16}
-                          color={isMyMessage ? colors.white : colors.black}>
-                          {part.content}
-                        </Text>
-                      );
-                    }
-                  })}
-                </Box>
-              )}
+                            )}
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={true}
+                              nestedScrollEnabled={true}
+                              style={{maxWidth: '100%'}}>
+                              <Box
+                                backgroundColor={
+                                  isMyMessage
+                                    ? 'rgba(0,0,0,0.2)'
+                                    : 'rgba(0,0,0,0.05)'
+                                }
+                                p={12}
+                                borderRadius={8}>
+                                <Text
+                                  style={{fontFamily: 'monospace'}}
+                                  fontSize={10}
+                                  color={isMyMessage ? colors.white : '#000'}>
+                                  {part.content}
+                                </Text>
+                              </Box>
+                            </ScrollView>
+                          </Box>
+                        );
+                      } else {
+                        return (
+                          <Text
+                            key={index}
+                            style={{maxWidth: '100%'}}
+                            fontSize={16}
+                            color={isMyMessage ? colors.white : colors.black}>
+                            {part.content}
+                          </Text>
+                        );
+                      }
+                    })}
+                  </Box>
+                )}
             </LinearGradient>
           </Box>
 

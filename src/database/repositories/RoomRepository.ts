@@ -1,4 +1,4 @@
-import { v4 } from 'uuid';
+import {v4} from 'uuid';
 import {AppDataSource} from '../dataSource';
 import {Room} from '../entities/Room';
 
@@ -10,7 +10,10 @@ export class RoomRepository {
 
   // Tạo room mới
   async create(roomData: Room): Promise<Room> {
-    roomData.id = v4();
+    // Chỉ generate UUID nếu chưa có ID (để support deterministic ID)
+    if (!roomData.id) {
+      roomData.id = v4();
+    }
     const room = this.repository.create(roomData);
     return await this.repository.save(room);
   }
@@ -37,7 +40,10 @@ export class RoomRepository {
   }
 
   // Tìm room private giữa 2 users
-  async findPrivateRoom(userId1: string, userId2: string): Promise<Room | null> {
+  async findPrivateRoom(
+    userId1: string,
+    userId2: string,
+  ): Promise<Room | null> {
     const allRooms = await this.repository.find({
       where: {type: 'private'},
     });

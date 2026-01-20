@@ -16,8 +16,6 @@ import {colors} from '../../../theme/colors';
 import {getUserByAttributes} from '@/features/auth/api/getUserByAttributes';
 import {getRoomByMember} from '@/features/chat/api/getRoomByMember';
 import {userStore} from '@/store/userStore';
-import {createMessage} from '@/features/chat/api/createMessage';
-import {v4} from 'uuid';
 import type {
   BluetoothDevice,
   ImageChunk,
@@ -31,6 +29,7 @@ import {useCreateUser} from '@/features/auth/hooks/useCreateUser';
 import {RoomRepository} from '@/database/repositories/RoomRepository';
 import {UserRepository} from '@/database/repositories/UserRepository';
 import {createRoom} from '@/features/chat/api/createRoom';
+import { useCreateMessage } from '@/features/chat/hooks/useCreateMessage';
 
 const roomRepo = new RoomRepository();
 const userRepo = new UserRepository();
@@ -45,6 +44,7 @@ const ListMessageScreen = () => {
   const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
 
   const {mutateAsync: createUser, isPending} = useCreateUser();
+  const {mutateAsync: createMessage} = useCreateMessage();
   const fetchAll = async () => {
     const rooms = await roomRepo.findAll();
     console.log('rooms', rooms);
