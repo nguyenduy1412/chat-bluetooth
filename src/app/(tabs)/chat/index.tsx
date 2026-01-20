@@ -16,7 +16,6 @@ import {colors} from '../../../theme/colors';
 import {getUserByAttributes} from '@/features/auth/api/getUserByAttributes';
 import {getRoomByMember} from '@/features/chat/api/getRoomByMember';
 import {userStore} from '@/store/userStore';
-import {getSizeImage} from '@/utils/getSizeImage';
 import {createMessage} from '@/features/chat/api/createMessage';
 import {v4} from 'uuid';
 import type {
@@ -28,21 +27,29 @@ import DeviceItem from '@/features/chat/components/DeviceItem';
 import {useBluetooth} from '@/features/chat/hooks/useBluetooth';
 import {User} from '@/database/entities/User';
 import {Room} from '@/database/entities/Room';
-import {de, id} from 'zod/v4/locales';
-import {createRoom} from '@/features/chat/api/createRoom';
 import {useCreateUser} from '@/features/auth/hooks/useCreateUser';
+import {RoomRepository} from '@/database/repositories/RoomRepository';
+import {UserRepository} from '@/database/repositories/UserRepository';
 
+const roomRepo = new RoomRepository();
+const userRepo = new UserRepository();
 const ListMessageScreen = () => {
   const {top, bottom} = useSafeAreaInsets();
 
-  const {user,setUser} = userStore();
+  const {user, setUser} = userStore();
 
   // Lưu room info cho mỗi device (key là deviceAddress)
   const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
 
   const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
-  const {mutateAsync: createUser, isPending} = useCreateUser();
 
+  const {mutateAsync: createUser, isPending} = useCreateUser();
+  const fetchAll = async () => {
+    const rooms = await roomRepo.findAll();
+    console.log('rooms', rooms);
+    const users = await userRepo.findAll();
+    console.log('users', users);
+  };
   const {
     checkAndEnableBluetooth,
     startDiscovery,
@@ -63,39 +70,51 @@ const ListMessageScreen = () => {
 
   // ==================== XỬ LÝ TIN NHẮN ====================
 
-  const handleUserInfo = async (sender: User, receiverAddress: string) => {
+  const handleUserInfo = async (sender: User, senderAddress: string) => {
     try {
-      console.log('👤 Received user info from:', sender);
+      console.log('👤 [RESPONDER] Received USER_INFO from:', sender.name);
+      console.log('   Sender ID:', sender.id);
+      console.log('   Sender Address:', senderAddress);
 
       if (!user?.id || !sender?.id) return;
-      // Tạo hoặc lấy room giữa 2 user
-      const room = await getRoomByMember(user.id, sender.id);
-      
-      console.log('✅ Room created/found:', room.id);
-      // lưu thông tin receiver
+
+      // Cập nhật địa chỉ Bluetooth của chính mình (nếu sender gửi kèm)
       await updateDeviceAddress(sender?.deviceAddress || '');
-      sender.deviceAddress = receiverAddress;
+
+      // Tạo hoặc lấy room (chỉ bên Responder tạo)
+      const room = await getRoomByMember(user.id, sender.id);
+      console.log('✅ [RESPONDER] Room created/found:', room.id);
+
+      // Lưu sender với deviceAddress đúng
+      sender.deviceAddress = senderAddress;
       await createUser(sender);
+
       // Lưu room info vào ref
-      roomInfoRef.current[receiverAddress] = {
+      roomInfoRef.current[senderAddress] = {
         roomId: room.id,
         receiver: sender,
       };
 
-      // Gửi lại ROOM_INFO và thông tin user cho bên kia dưới dạng JSON
+      // Lấy địa chỉ của chính mình (đã được set bởi bên kia)
+      const myAddress = user.deviceAddress || '';
+
+      // Gửi ROOM_INFO với room và user info của chính mình
       const roomInfoData = {
         type: 'ROOM_INFO',
         room,
         user: {
           id: user.id,
           name: user.name,
-          image: user?.image,
-          deviceAddress: receiverAddress,
+          image: user?.image || '',
+          deviceAddress: myAddress,
         },
       };
+
+      console.log('📤 [RESPONDER] Sending ROOM_INFO with room:', room.id);
+      console.log('   My Address:', myAddress);
       await BluetoothModule.sendMessageToAll(JSON.stringify(roomInfoData));
-      handleNavigateToChat(roomInfoRef.current[receiverAddress]);
-      console.log('📤 Sent room info back:', room.id);
+
+      handleNavigateToChat(roomInfoRef.current[senderAddress]);
     } catch (error) {
       console.error('❌ Error handling user info:', error);
     }
@@ -107,12 +126,18 @@ const ListMessageScreen = () => {
     receiverAddress: string,
   ) => {
     try {
+      console.log('🏠 [INITIATOR] Received ROOM_INFO');
+      console.log('   Room ID:', room.id);
+      console.log('   Receiver:', receiver.name);
+      console.log('   Receiver Address:', receiverAddress);
+
       if (!room || !receiver) {
         console.error('Invalid room or receiver data');
         return;
       }
-      await createRoom(room);
-      console.log('🏠 Received room info:', room, receiver);
+
+      // ✅ CHỈ LƯU ROOM INFO, KHÔNG TẠO ROOM MỚI
+      // Room đã được tạo bởi bên Responder
 
       // Lưu room info vào ref
       roomInfoRef.current[receiverAddress] = {
@@ -124,9 +149,12 @@ const ListMessageScreen = () => {
           deviceAddress: receiver.deviceAddress,
         },
       };
+
+      // Lưu receiver user vào database
       await createUser(receiver);
+
+      console.log('✅ [INITIATOR] Room info saved, navigating to chat');
       handleNavigateToChat(roomInfoRef.current[receiverAddress]);
-      console.log('✅ Room info saved for:', receiverAddress);
     } catch (error) {
       console.error('❌ Error handling room info:', error);
     }
@@ -137,7 +165,7 @@ const ListMessageScreen = () => {
     const {message, senderName, deviceAddress} = data;
 
     console.log('📩 Received message in index:', message);
-    
+
     try {
       const jsonData = JSON.parse(message);
 
@@ -149,7 +177,7 @@ const ListMessageScreen = () => {
 
       // Xử lý ROOM_INFO protocol
       if (jsonData.type === 'ROOM_INFO') {
-        handleRoomInfo(jsonData.room, jsonData.user, deviceAddress);
+        await handleRoomInfo(jsonData.room, jsonData.user, deviceAddress);
         return;
       }
 
@@ -174,7 +202,15 @@ const ListMessageScreen = () => {
     messageEntity: any,
     deviceAddress: string,
   ) => {
-    const {id: messageId, message: chunk, width, height, roomId, created_by, createdAt} = messageEntity;
+    const {
+      id: messageId,
+      message: chunk,
+      width,
+      height,
+      roomId,
+      created_by,
+      createdAt,
+    } = messageEntity;
 
     // Khởi tạo storage nếu chưa có
     if (!imageChunksRef.current[messageId]) {
@@ -221,8 +257,8 @@ const ListMessageScreen = () => {
           message: base64Image,
           createdAt: new Date(imageData.timestamp),
           type: 'image',
-          width: imageData.width,
-          height: imageData.height,
+          width: imageData.width || 0,
+          height: imageData.height || 0,
           roomId: imageData.roomId,
           created_by: imageData.created_by,
           status: 'delivered',
@@ -273,24 +309,6 @@ const ListMessageScreen = () => {
       async (data: any) => await handleMessageReceived(data),
     );
 
-    // Listener: Ảnh nhận được (từ protocol Base64 cũ nếu có)
-    // const imageReceivedListener = BluetoothModule.addEventListener(
-    //   'onImageReceived',
-    //   async (data: any) => {
-    //     console.log('📸 Image received:', data.filePath);
-    //     await saveMessageToDB({
-    //       message: `file://${data.filePath}`,
-    //       createdAt: new Date(),
-    //       createdBy: {
-    //         id: data.deviceAddress,
-    //         name: data.deviceName,
-    //       },
-    //       type: 'image',
-    //       status: 'delivered',
-    //     });
-    //   },
-    // );
-
     // Listener: Kết nối thành công
     const connectedListener = BluetoothModule.addEventListener(
       'onConnected',
@@ -305,7 +323,8 @@ const ListMessageScreen = () => {
           ];
         });
 
-        // Gửi thông tin user qua Bluetooth ngay sau khi kết nối (dưới dạng JSON)
+        // Gửi thông tin user qua Bluetooth ngay sau khi kết nối
+        // Cả 2 bên đều gửi USER_INFO, race condition sẽ được xử lý bởi deterministic room ID
         if (user?.id) {
           try {
             const userInfoData = {
@@ -313,14 +332,14 @@ const ListMessageScreen = () => {
               user: {
                 id: user.id,
                 name: user.name,
-                image: user.image,
-                deviceAddress:info.deviceAddress,
+                image: user.image || '',
+                deviceAddress: info.deviceAddress,
               },
             };
             await BluetoothModule.sendMessageToAll(
               JSON.stringify(userInfoData),
             );
-            console.log('📤 Sent user info:', user.name);
+            console.log('📤 Sent USER_INFO:', user.name);
           } catch (error) {
             console.error('❌ Error sending user info:', error);
           }
@@ -417,6 +436,7 @@ const ListMessageScreen = () => {
   }, []);
 
   useEffect(() => {
+    fetchAll();
     if (isEnabled) {
       initializeBluetoothServer();
     }
@@ -465,7 +485,7 @@ const ListMessageScreen = () => {
     },
     [connectTo],
   );
-  const handleNavigateToChat = useCallback(async (roomInfo: RoomInfo) => {
+  const handleNavigateToChat = useCallback((roomInfo: RoomInfo) => {
     navigate('ChatStack', {
       screen: 'Message',
       params: {

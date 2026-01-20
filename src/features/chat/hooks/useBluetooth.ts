@@ -151,7 +151,7 @@ export const useBluetooth = () => {
   const updateDeviceAddress = async (deviceAddress:string) => {
     try {
       if (!user?.id || !deviceAddress || user.deviceAddress === deviceAddress) return;
-
+      
       await updateUser({
         id: user.id,
         data: {deviceAddress},

@@ -33,6 +33,7 @@ type DeviceProp = {
 };
 const MessageScreen = () => {
   const route = useRoute<RouteProp<RootNavigatorParamList, 'MessageScreen'>>();
+  console.log('Route params:', route.params);
   const {user} = userStore();
   const [bluetoothName, setBluetoothName] = useState<string>('');
   const [bluetoothAddress, setBluetoothAddress] = useState<string>('');
@@ -74,9 +75,11 @@ const MessageScreen = () => {
   };
 
   const handleSendMessage = async (text: string) => {
+    console.log('Sending message:', text,connectedDevices);
     const trimmedText = text.trim();
     if (
-      connectedDevices.length === 0 ||
+      
+      
       trimmedText === '' ||
       !route.params?.roomId
     ) {
