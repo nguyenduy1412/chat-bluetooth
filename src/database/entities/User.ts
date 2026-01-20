@@ -4,7 +4,6 @@ import {MessageEntity} from './MessageEntity';
 @Entity('user')
 export class User {
   @PrimaryColumn('text')
-  @Generated('uuid')
   id?: string;
 
   @Column({type: 'varchar', length: 255, nullable: true})

@@ -13,7 +13,6 @@ import {Room} from './Room';
 @Entity('message')
 export class MessageEntity {
   @PrimaryColumn('text')
-  @Generated('uuid')
   id!: string;
 
   @Column({type: 'varchar', length: 50})
