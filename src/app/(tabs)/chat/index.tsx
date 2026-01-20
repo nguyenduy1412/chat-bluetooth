@@ -372,22 +372,6 @@ const ListMessageScreen = () => {
     );
   };
 
-  const handleCreateUser = async () => {
-    // try {
-    //   const newUser = await userRepo.create({
-    //     name: `AI`,
-    //     email: `duy272496@gmail.com`,
-    //     password: 'duy123456',
-    //     idDevice: `device_${Date.now()}`,
-    //   });
-    //   console.log('✅ Created user:', newUser);
-    // } catch (error) {
-    //   console.error('❌ Error creating user:', error);
-    // }
-    // await deleteAndRecreateDatabase();
-    // const res = await userRepo.findAll();
-    // console.log('id', res[0].createdAt)
-  };
   const handleChatAI = async () => {
     const ai = await getUserByAttributes({ system: true });
     console.log('ai', ai);
@@ -516,9 +500,6 @@ const ListMessageScreen = () => {
             ) : null
           }
         />
-        <Box h={50} w={50} backgroundColor={'red'} onPress={handleCreateUser}>
-          <Text>Creat User</Text>
-        </Box>
       </Box>
     </Box>
   );
