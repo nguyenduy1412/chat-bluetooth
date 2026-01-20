@@ -112,7 +112,7 @@ const ListMessageScreen = () => {
           email: receiver.email,
         },
       };
-      
+
       console.log('✅ Room info saved for:', senderAddress);
     } catch (error) {
       console.error('❌ Error handling room info:', error);
@@ -464,6 +464,11 @@ const ListMessageScreen = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (isEnabled) {
+      initializeBluetoothServer();
+    }
+  }, [isEnabled, initializeBluetoothServer]);
   const handleConected = async (
     isConnectedDevice: boolean,
     item: BluetoothDevice,
