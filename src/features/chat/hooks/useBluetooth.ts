@@ -2,6 +2,8 @@ import {Alert} from 'react-native';
 import BluetoothModule from '../../../assets/managers/BluetoothModule';
 import {useCallback, useState} from 'react';
 import {BluetoothDevice, ConnectedDevice} from '../types';
+import {useUpdateUser} from '@/features/auth/hooks/useUpdateUser';
+import {userStore} from '@/store/userStore';
 export const useBluetooth = () => {
   const [isEnabled, setIsEnabled] = useState(false);
   const [discovering, setDiscovering] = useState(false);
@@ -9,6 +11,8 @@ export const useBluetooth = () => {
   const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>(
     [],
   );
+  const {user} = userStore();
+  const {mutateAsync: updateUser, isPending: isUpdating} = useUpdateUser();
   const checkAndEnableBluetooth = async () => {
     try {
       const available = await BluetoothModule.isBluetoothAvailable();
@@ -144,7 +148,19 @@ export const useBluetooth = () => {
       console.error('❌ Lỗi khi đổi tên Bluetooth:', err);
     }
   }, []);
-
+  const updateDeviceAddress = async () => {
+    try {
+      if (!user?.id || user?.deviceAddress) return;
+      const address = await BluetoothModule.getBluetoothAddress();
+      await updateUser({
+        id: user.id,
+        data: {deviceAddress: address},
+      });
+      console.log('✅ Cập nhật địa chỉ Bluetooth thành công:', address);
+    } catch (err) {
+      console.error('❌ Lỗi khi cập nhật địa chỉ Bluetooth:', err);
+    }
+  };
   return {
     isEnabled,
     checkAndEnableBluetooth,
@@ -160,5 +176,6 @@ export const useBluetooth = () => {
     setDiscovering,
     setConnectedDevices,
     autoRename,
+    updateDeviceAddress
   };
 };

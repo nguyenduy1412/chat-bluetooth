@@ -32,5 +32,5 @@ export interface ImageChunk {
   receivedChunks: number;
   timestamp: number;
   senderName: string;
-  senderAddress: string;
+  deviceAddress: string;
 }

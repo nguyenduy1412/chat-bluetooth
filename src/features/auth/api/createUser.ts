@@ -4,7 +4,8 @@ import { v4 } from "uuid";
 import DeviceInfo from 'react-native-device-info';
 export const createUser = async (userData: User): Promise<User> => {
   const userRepo = new UserRepository();
-  userData.id = v4();
+  if(!userData?.id)
+    userData.id = v4();
   userData.idDevice = await DeviceInfo.getUniqueId();
   const newUser = await userRepo.create(userData);
   return newUser;

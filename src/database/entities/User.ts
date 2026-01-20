@@ -37,6 +37,9 @@ export class User {
   @Column({type: 'boolean', default: false})
   system?: boolean;
 
+  @Column({type: 'varchar', nullable: true})
+  deviceAddress?: string;
+
   @OneToMany(() => MessageEntity, message => message.createdBy)
   messages?: MessageEntity[];
 }
