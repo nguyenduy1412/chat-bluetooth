@@ -10,7 +10,7 @@ const ChatStack = () => {
   return (
     <Stack.Navigator 
       screenOptions={{ headerShown: false }}
-      initialRouteName="Message"
+      initialRouteName="ListMessage"
     >
       <Stack.Screen name="ListMessage" component={ListMessageScreen} />
       <Stack.Screen name="Message" component={MessageScreen} />

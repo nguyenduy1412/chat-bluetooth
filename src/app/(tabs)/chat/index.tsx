@@ -180,6 +180,7 @@ const ListMessageScreen = () => {
   }, [isEnabled]);
 
   const disconnect = async (address: string) => {
+    console.log("disconect")
     try {
       await BluetoothModule.disconnect(address);
     } catch (error: any) {
@@ -686,21 +687,22 @@ const ListMessageScreen = () => {
     item: BluetoothDevice,
   ) => {
     console.log('isConnectedDevice', item.name);
+    console.log('isConnectedDevice', item.name);
     if (!isConnectedDevice) {
       await connectTo(item);
     } else {
       // Lấy room info từ ref
       const roomInfo = roomInfoRef.current[item.address];
-      
+      console.log('roomInfo', roomInfo);
       if (roomInfo) {
         // Đã có room info, navigate với params đầy đủ
-        navigate('ChatStack', {
-          screen: 'Message',
-          params: {
-            roomId: roomInfo.roomId,
-            receiver: roomInfo.receiver,
-          },
-        });
+        // navigate('ChatStack', {
+        //   screen: 'Message',
+        //   params: {
+        //     roomId: roomInfo.roomId,
+        //     receiver: roomInfo.receiver,
+        //   },
+        // });
       } else {
         // Chưa có room info, chờ 1 chút rồi thử lại
         Alert.alert(
@@ -713,14 +715,15 @@ const ListMessageScreen = () => {
               setTimeout(() => {
                 const updatedRoomInfo = roomInfoRef.current[item.address];
                 if (updatedRoomInfo) {
-                  navigate('ChatStack', {
-                    screen: 'Message',
-                    params: {
-                      name: item.name,
-                      roomId: updatedRoomInfo.roomId,
-                      receiver: updatedRoomInfo.receiver,
-                    },
-                  });
+                  console.log('updatedRoomInfo', updatedRoomInfo);
+                  // navigate('ChatStack', {
+                  //   screen: 'Message',
+                  //   params: {
+                  //     name: item.name,
+                  //     roomId: updatedRoomInfo.roomId,
+                  //     receiver: updatedRoomInfo.receiver,
+                  //   },
+                  // });
                 } else {
                   Alert.alert('❌ Lỗi', 'Không thể đồng bộ thông tin room. Vui lòng thử lại.');
                 }
@@ -759,7 +762,7 @@ const ListMessageScreen = () => {
               isConnectedDevice ? disconnect(item.address) : connectTo(item)
             }>
             <Box
-              backgroundColor={isConnectedDevice ? '#FF3B30' : '#007AFF'}
+              backgroundColor={isConnectedDevice ? '#FF3B30' : 'red'}
               py={8}
               px={16}
               borderRadius={8}>

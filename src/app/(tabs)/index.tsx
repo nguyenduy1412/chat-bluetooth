@@ -265,9 +265,9 @@ const HomeScreen = () => {
             {name: info.deviceName, address: info.deviceAddress},
           ];
         });
-        navigate('ChatStack', {
-          screen: 'Message',
-        });
+        // navigate('ChatStack', {
+        //   screen: 'Message',
+        // });
       },
     );
 
