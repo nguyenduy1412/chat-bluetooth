@@ -35,7 +35,7 @@ import {useCreateUser} from '@/features/auth/hooks/useCreateUser';
 const ListMessageScreen = () => {
   const {top, bottom} = useSafeAreaInsets();
 
-  const {user} = userStore();
+  const {user,setUser} = userStore();
 
   // Lưu room info cho mỗi device (key là deviceAddress)
   const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
@@ -63,21 +63,23 @@ const ListMessageScreen = () => {
 
   // ==================== XỬ LÝ TIN NHẮN ====================
 
-  const handleUserInfo = async (receiver: User, senderAddress: string) => {
+  const handleUserInfo = async (sender: User, receiverAddress: string) => {
     try {
-      console.log('👤 Received user info from:', receiver);
+      console.log('👤 Received user info from:', sender);
 
-      if (!user?.id || !receiver?.id) return;
+      if (!user?.id || !sender?.id) return;
       // Tạo hoặc lấy room giữa 2 user
-      const room = await getRoomByMember(user.id, receiver.id);
-
+      const room = await getRoomByMember(user.id, sender.id);
+      
       console.log('✅ Room created/found:', room.id);
       // lưu thông tin receiver
-      await createUser(user);
+      await updateDeviceAddress(sender?.deviceAddress || '');
+      sender.deviceAddress = receiverAddress;
+      await createUser(sender);
       // Lưu room info vào ref
-      roomInfoRef.current[senderAddress] = {
+      roomInfoRef.current[receiverAddress] = {
         roomId: room.id,
-        receiver,
+        receiver: sender,
       };
 
       // Gửi lại ROOM_INFO và thông tin user cho bên kia dưới dạng JSON
@@ -88,11 +90,11 @@ const ListMessageScreen = () => {
           id: user.id,
           name: user.name,
           image: user?.image,
-          deviceAddress: user?.deviceAddress,
+          deviceAddress: receiverAddress,
         },
       };
       await BluetoothModule.sendMessageToAll(JSON.stringify(roomInfoData));
-      handleNavigateToChat(roomInfoRef.current[senderAddress]);
+      handleNavigateToChat(roomInfoRef.current[receiverAddress]);
       console.log('📤 Sent room info back:', room.id);
     } catch (error) {
       console.error('❌ Error handling user info:', error);
@@ -102,7 +104,7 @@ const ListMessageScreen = () => {
   const handleRoomInfo = async (
     room: Room,
     receiver: User,
-    senderAddress: string,
+    receiverAddress: string,
   ) => {
     try {
       if (!room || !receiver) {
@@ -113,7 +115,7 @@ const ListMessageScreen = () => {
       console.log('🏠 Received room info:', room, receiver);
 
       // Lưu room info vào ref
-      roomInfoRef.current[senderAddress] = {
+      roomInfoRef.current[receiverAddress] = {
         roomId: room.id,
         receiver: {
           id: receiver.id,
@@ -122,8 +124,9 @@ const ListMessageScreen = () => {
           deviceAddress: receiver.deviceAddress,
         },
       };
-      handleNavigateToChat(roomInfoRef.current[senderAddress]);
-      console.log('✅ Room info saved for:', senderAddress);
+      await createUser(receiver);
+      handleNavigateToChat(roomInfoRef.current[receiverAddress]);
+      console.log('✅ Room info saved for:', receiverAddress);
     } catch (error) {
       console.error('❌ Error handling room info:', error);
     }
@@ -371,7 +374,7 @@ const ListMessageScreen = () => {
                 id: user.id,
                 name: user.name,
                 image: user.image,
-                deviceAddress: user.deviceAddress,
+                deviceAddress:info.deviceAddress,
               },
             };
             await BluetoothModule.sendMessageToAll(
@@ -460,7 +463,6 @@ const ListMessageScreen = () => {
 
       const enabled = await checkAndEnableBluetooth();
       if (enabled) {
-        await updateDeviceAddress();
         await autoRename();
         await initializeBluetoothServer();
       }

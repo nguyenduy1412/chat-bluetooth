@@ -14,7 +14,10 @@ export const LLMProvider = ({children}: {children: React.ReactNode}) => {
   const hasInitialized = useRef(false);
 
   console.log('🚀 LLMProvider using fixed model:', SELECTED_MODEL);
-  const llm = useLLM({model: SELECTED_MODEL});
+  // const llm = useLLM({model: SELECTED_MODEL});
+  const llm = {
+    isReady:false
+  };
   // console.log('🚀 LLMProvider rendered, LLM isReady:', llm.isReady);
 
   useEffect(() => {

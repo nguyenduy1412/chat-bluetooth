@@ -148,15 +148,15 @@ export const useBluetooth = () => {
       console.error('❌ Lỗi khi đổi tên Bluetooth:', err);
     }
   }, []);
-  const updateDeviceAddress = async () => {
+  const updateDeviceAddress = async (deviceAddress:string) => {
     try {
-      if (!user?.id || user?.deviceAddress) return;
-      const address = await BluetoothModule.getBluetoothAddress();
+      if (!user?.id || !deviceAddress || user.deviceAddress === deviceAddress) return;
+
       await updateUser({
         id: user.id,
-        data: {deviceAddress: address},
+        data: {deviceAddress},
       });
-      console.log('✅ Cập nhật địa chỉ Bluetooth thành công:', address);
+      console.log('✅ Cập nhật địa chỉ Bluetooth thành công:', deviceAddress);
     } catch (err) {
       console.error('❌ Lỗi khi cập nhật địa chỉ Bluetooth:', err);
     }
