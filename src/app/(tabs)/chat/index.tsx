@@ -1,4 +1,4 @@
-import {useEffect, useState, useCallback, useRef} from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,308 +13,134 @@ import {navigate} from '../../../utils/navigationUtils';
 import {Box} from '../../../components/common/Layout/Box';
 import {Text} from '../../../components/common/Text/Text';
 import {colors} from '../../../theme/colors';
-import {formatName} from '../../../features/chat/utils/formatName';
-import { getUserByAttributes } from '@/features/auth/api/getUserByAttributes';
-import { getRoomByMember } from '@/features/chat/api/getRoomByMember';
-import { userStore } from '@/store/userStore';
-import { getSizeImage } from '@/utils/getSizeImage';
-import { createMessage } from '@/features/chat/api/createMessage';
-import { v4 } from 'uuid';
+import {getUserByAttributes} from '@/features/auth/api/getUserByAttributes';
+import {getRoomByMember} from '@/features/chat/api/getRoomByMember';
+import {userStore} from '@/store/userStore';
+import {getSizeImage} from '@/utils/getSizeImage';
+import {createMessage} from '@/features/chat/api/createMessage';
+import {v4} from 'uuid';
+import type { BluetoothDevice, ImageChunk, RoomInfo } from '@/features/chat/types';
+import DeviceItem from '@/features/chat/components/DeviceItem';
+import {useBluetooth} from '@/features/chat/hooks/useBluetooth';
+import { User } from '@/database/entities/User';
+import { Room } from '@/database/entities/Room';
+import { id } from 'zod/v4/locales';
+import { createRoom } from '@/features/chat/api/createRoom';
 
-// Interface cho device
-interface BluetoothDevice {
-  name: string;
-  address: string;
-  bondState: 'BONDED' | 'BONDING' | 'NONE' | 'UNKNOWN';
-}
-
-interface ConnectedDevice {
-  name: string;
-  address: string;
-}
 const ListMessageScreen = () => {
   const {top, bottom} = useSafeAreaInsets();
-  const [devices, setDevices] = useState<BluetoothDevice[]>([]);
-  const [discovering, setDiscovering] = useState(false);
-  const [isEnabled, setIsEnabled] = useState(false);
-  const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>(
-    [],
-  );
+ 
   const {user} = userStore();
-  const [bluetoothName, setBluetoothName] = useState<string>('');
 
   // Lưu room info cho mỗi device (key là deviceAddress)
-  const roomInfoRef = useRef<{
-    [deviceAddress: string]: {
-      roomId: string;
-      receiver: any;
-    };
-  }>({});
+  const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
 
-  const imageChunksRef = useRef<{
-    [key: string]: {
-      chunks: string[];
-      totalChunks: number;
-      receivedChunks: number;
-      timestamp: number;
-      senderName: string;
-      senderAddress: string;
-    };
-  }>({});
-  const loadData = async () => {
-    try {
-    } catch (error) {
-      console.error('❌ Load data error:', error);
-    }
-  };
+  const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
 
-  useEffect(() => {
-    loadData();
-  }, []);
-  // ✅ Kiểm tra và bật Bluetooth
-  const checkAndEnableBluetooth = async () => {
-    try {
-      const available = await BluetoothModule.isBluetoothAvailable();
-      if (!available) {
-        Alert.alert('❌ Lỗi', 'Thiết bị không hỗ trợ Bluetooth');
-        return false;
-      }
-      const enabled = await BluetoothModule.isBluetoothEnabled();
-      setIsEnabled(enabled);
-
-      if (!enabled) {
-        await BluetoothModule.enableBluetooth();
-        setTimeout(async () => {
-          const nowEnabled = await BluetoothModule.isBluetoothEnabled();
-          setIsEnabled(nowEnabled);
-          if (nowEnabled) {
-            // loadBluetoothName();
-          }
-        }, 1000);
-        return false;
-      }
-
-      return true;
-    } catch (error: any) {
-      console.error('Check Bluetooth error:', error);
-      return false;
-    }
-  };
-
-  // ✅ Quét thiết bị (dùng cho refresh)
-  const startDiscovery = useCallback(async () => {
-    try {
-      if (!isEnabled) {
-        Alert.alert('⚠️ Bluetooth chưa bật', 'Vui lòng bật Bluetooth trước');
-        return;
-      }
-
-      setDiscovering(true);
-      setDevices([]);
-      await BluetoothModule.startDiscovery();
-      console.log('🔍 Bắt đầu quét thiết bị');
-    } catch (error: any) {
-      console.error('Discovery error:', error);
-      setDiscovering(false);
-      Alert.alert('❌ Lỗi quét', error.message || String(error));
-    }
-  }, [isEnabled]);
-
-  // ✅ Kết nối tới thiết bị
-  const connectTo = async (device: BluetoothDevice) => {
-    try {
-      // Kiểm tra xem đã có kết nối với thiết bị này chưa
-      const isAlreadyConnected = connectedDevices.some(
-        d => d.address === device.address,
-      );
-
-      if (isAlreadyConnected) {
-        console.log('⚠️ Đã có kết nối với thiết bị này:', device.name);
-        Alert.alert(
-          '⚠️ Đã kết nối',
-          `Bạn đã kết nối với ${device.name} rồi`,
-          [{text: 'OK'}],
-        );
-        return;
-      }
-
-      console.log('🔌 Đang kết nối đến:', device.name);
-      await BluetoothModule.connectToDevice(device.address);
-    } catch (error: any) {
-      console.error('Connect error:', error);
-      
-      // Không hiển thị alert nếu đã kết nối rồi
-      if (error.code === 'ALREADY_CONNECTED') {
-        console.log('⚠️ Native layer báo đã kết nối');
-        return;
-      }
-      
-      Alert.alert(
-        '❌ Kết nối thất bại',
-        `Không thể kết nối với ${device.name}\n\n${
-          error.message || String(error)
-        }`,
-        [
-          {text: 'Thử lại', onPress: () => connectTo(device)},
-          {text: 'Đóng', style: 'cancel'},
-        ],
-      );
-    }
-  };
-
-  // ✅ Khởi động server và discoverable (gọi ngay khi vào màn hình)
-  const initializeBluetoothServer = useCallback(async () => {
-    try {
-      if (!isEnabled) return;
-
-      // Bật discoverable
-      await BluetoothModule.makeDiscoverable(3000);
-      console.log('✅ Đã bật chế độ hiển thị (5 phút)');
-
-      // Start server để chờ kết nối
-      await BluetoothModule.startServer();
-      console.log('✅ Server đã sẵn sàng chờ kết nối');
-    } catch (error: any) {
-      console.error('Initialize server error:', error);
-    }
-  }, [isEnabled]);
-
-  const disconnect = async (address: string) => {
-    console.log("disconect")
-    try {
-      await BluetoothModule.disconnect(address);
-    } catch (error: any) {
-      console.error('Disconnect error:', error);
-    }
-  };
-
-  const disconnectAll = async () => {
-    try {
-      await BluetoothModule.disconnectAll();
-      setConnectedDevices([]);
-    } catch (error: any) {
-      console.error('Disconnect all error:', error);
-    }
-  };
+  const {
+    checkAndEnableBluetooth,
+    startDiscovery,
+    connectTo,
+    initializeBluetoothServer,
+    disconnect,
+    disconnectAll,
+    devices,
+    discovering,
+    isEnabled,
+    connectedDevices,
+    setDevices,
+    setDiscovering,
+    setConnectedDevices,
+    autoRename
+  } = useBluetooth();
 
   // ==================== XỬ LÝ TIN NHẮN ====================
 
-  const handleUserInfo = async (message: string, senderName: string, senderAddress: string) => {
+  const handleUserInfo = async (
+    receiver: User,
+    senderAddress: string,
+  ) => {
     try {
-      // Parse JSON: {type: 'USER_INFO', userId, userName, userEmail}
-      const data = JSON.parse(message);
-      const {userId: remoteUserId, userName: remoteUserName, userEmail: remoteUserEmail = ''} = data;
 
-      console.log('👤 Received user info from:', remoteUserName, remoteUserId);
+      console.log('👤 Received user info from:', receiver);
 
-      if (!user?.id) {
-        console.error('❌ Current user not found');
-        return;
-      }
-
+      if(!user?.id || !receiver?.id) return;
       // Tạo hoặc lấy room giữa 2 user
-      const room = await getRoomByMember(user.id, remoteUserId);
-      
+      const room = await getRoomByMember(user.id, receiver.id);
+
       console.log('✅ Room created/found:', room.id);
 
       // Lưu room info vào ref
       roomInfoRef.current[senderAddress] = {
         roomId: room.id,
-        receiver: {
-          id: remoteUserId,
-          name: remoteUserName,
-          email: remoteUserEmail,
-        },
+        receiver
       };
 
-      // Gửi lại ROOM_INFO cho bên kia dưới dạng JSON
+      // Gửi lại ROOM_INFO và thông tin user cho bên kia dưới dạng JSON
       const roomInfoData = {
         type: 'ROOM_INFO',
-        roomId: room.id,
-        userId: user.id,
-        userName: user.name || bluetoothName,
-        userEmail: user.email || '',
+        room,
+        user:{
+          id: user.id,
+          name: user.name,
+          image: user.image,
+        }
       };
       await BluetoothModule.sendMessageToAll(JSON.stringify(roomInfoData));
-      
+
       console.log('📤 Sent room info back:', room.id);
     } catch (error) {
       console.error('❌ Error handling user info:', error);
     }
   };
 
-  const handleRoomInfo = (message: string, senderAddress: string) => {
+  const handleRoomInfo = async (room: Room, receiver: User, senderAddress: string) => {
     try {
-      // Parse JSON: {type: 'ROOM_INFO', roomId, userId, userName, userEmail}
-      const data = JSON.parse(message);
-      const {roomId, userId: remoteUserId, userName: remoteUserName, userEmail: remoteUserEmail = ''} = data;
-
-      console.log('🏠 Received room info:', roomId);
+      if(!room || !receiver) {
+        console.error('Invalid room or receiver data');
+        return;
+      }
+      await createRoom(room);
+      console.log('🏠 Received room info:', room,receiver);
 
       // Lưu room info vào ref
       roomInfoRef.current[senderAddress] = {
-        roomId,
+        roomId: room.id,
         receiver: {
-          id: remoteUserId,
-          name: remoteUserName,
-          email: remoteUserEmail,
+          id: receiver.id,
+          name: receiver.name,
+          email: receiver.email,
         },
       };
-
+      
       console.log('✅ Room info saved for:', senderAddress);
     } catch (error) {
       console.error('❌ Error handling room info:', error);
     }
   };
 
-  const saveMessageToDB = async (messageData: any) => {
-    try {
-      // Tìm hoặc tạo room cho 2 người (current user và sender)
-      const currentUserId = user?.id;
-      const senderId = messageData.createdBy?.id || messageData.created_by;
-      
-      if (!currentUserId || !senderId) {
-        console.error('❌ Missing user IDs for room creation');
-        return;
-      }
-
-      // Lấy hoặc tạo room giữa 2 user
-      const room = await getRoomByMember(currentUserId, senderId);
-      
-      // Lưu message vào DB
-      const newMessage = await createMessage({
-        id: v4(),
-        ...messageData,
-        roomId: room.id,
-        created_by: senderId,
-      } as any);
-      
-      console.log('✅ Message saved to DB:', newMessage.id);
-    } catch (error) {
-      console.error('❌ Error saving message to DB:', error);
-    }
-  };
 
   const handleMessageReceived = async (data: any) => {
     const {message, senderName, senderAddress} = data;
 
     console.log('📩 Received message in index:', message);
-
+    let jsonData;
     // Thử parse JSON trước
     try {
-      const jsonData = JSON.parse(message);
-      
+      jsonData = JSON.parse(message);
+
       // Xử lý USER_INFO protocol
       if (jsonData.type === 'USER_INFO') {
-        await handleUserInfo(message, senderName, senderAddress);
+        await handleUserInfo(jsonData.user, senderAddress);
         return;
       }
 
       // Xử lý ROOM_INFO protocol
       if (jsonData.type === 'ROOM_INFO') {
-        handleRoomInfo(message, senderAddress);
+        handleRoomInfo(jsonData.room, jsonData.user, senderAddress);
         return;
       }
+    
     } catch (e) {
       // Không phải JSON, xử lý như protocol cũ
     }
@@ -328,17 +154,8 @@ const ListMessageScreen = () => {
       handleImageEnd(message, senderName, senderAddress);
     } else {
       // Tin nhắn text thông thường
-      console.log('📨 Text message from', senderName, ':', message);
-      await saveMessageToDB({
-        message: message,
-        createdAt: new Date(),
-        createdBy: {
-          id: senderAddress,
-          name: senderName,
-        },
-        type: 'text',
-        status: 'delivered',
-      });
+      console.log('📨 Text message from',jsonData);
+      
     }
   };
 
@@ -365,17 +182,17 @@ const ListMessageScreen = () => {
     };
 
     // Lưu placeholder vào DB với ID cố định
-    await saveMessageToDB({
-      id: messageId,
-      message: '📷 Đang nhận ảnh...',
-      createdAt: new Date(timestamp),
-      createdBy: {
-        id: senderAddress,
-        name: senderName,
-      },
-      type: 'text',
-      status: 'sending',
-    });
+    // await saveMessageToDB({
+    //   id: messageId,
+    //   message: '📷 Đang nhận ảnh...',
+    //   createdAt: new Date(timestamp),
+    //   createdBy: {
+    //     id: senderAddress,
+    //     name: senderName,
+    //   },
+    //   type: 'text',
+    //   status: 'sending',
+    // });
   };
 
   const handleImageChunk = (
@@ -432,19 +249,19 @@ const ListMessageScreen = () => {
     const {width, height} = await getSizeImage(
       `data:image/jpeg;base64,${base64Image}`,
     );
-    
+
     // Cập nhật message trong DB với ảnh hoàn chỉnh
     try {
       const currentUserId = user?.id;
       const senderId = imageData.senderAddress;
-      
+
       if (!currentUserId || !senderId) {
         console.error('❌ Missing user IDs');
         return;
       }
 
       const room = await getRoomByMember(currentUserId, senderId);
-      
+
       await createMessage({
         id: messageId,
         message: `data:image/jpeg;base64,${base64Image}`,
@@ -460,7 +277,7 @@ const ListMessageScreen = () => {
         created_by: senderId,
         status: 'delivered',
       });
-      
+
       console.log('✅ Image saved to DB:', messageId);
     } catch (error) {
       console.error('❌ Error saving image to DB:', error);
@@ -506,22 +323,22 @@ const ListMessageScreen = () => {
     );
 
     // Listener: Ảnh nhận được (từ protocol Base64 cũ nếu có)
-    const imageReceivedListener = BluetoothModule.addEventListener(
-      'onImageReceived',
-      async (data: any) => {
-        console.log('📸 Image received:', data.filePath);
-        await saveMessageToDB({
-          message: `file://${data.filePath}`,
-          createdAt: new Date(),
-          createdBy: {
-            id: data.deviceAddress,
-            name: data.deviceName,
-          },
-          type: 'image',
-          status: 'delivered',
-        });
-      },
-    );
+    // const imageReceivedListener = BluetoothModule.addEventListener(
+    //   'onImageReceived',
+    //   async (data: any) => {
+    //     console.log('📸 Image received:', data.filePath);
+    //     await saveMessageToDB({
+    //       message: `file://${data.filePath}`,
+    //       createdAt: new Date(),
+    //       createdBy: {
+    //         id: data.deviceAddress,
+    //         name: data.deviceName,
+    //       },
+    //       type: 'image',
+    //       status: 'delivered',
+    //     });
+    //   },
+    // );
 
     // Listener: Kết nối thành công
     const connectedListener = BluetoothModule.addEventListener(
@@ -542,11 +359,15 @@ const ListMessageScreen = () => {
           try {
             const userInfoData = {
               type: 'USER_INFO',
-              userId: user.id,
-              userName: user.name || bluetoothName,
-              userEmail: user.email || '',
+              user:{
+                id: user.id,
+                name: user.name,
+                image: user.image,
+              },
             };
-            await BluetoothModule.sendMessageToAll(JSON.stringify(userInfoData));
+            await BluetoothModule.sendMessageToAll(
+              JSON.stringify(userInfoData),
+            );
             console.log('📤 Sent user info:', user.name);
           } catch (error) {
             console.error('❌ Error sending user info:', error);
@@ -607,7 +428,7 @@ const ListMessageScreen = () => {
 
     return () => {
       messageReceivedListener.remove();
-      imageReceivedListener.remove();
+      // imageReceivedListener.remove();
       deviceFoundListener.remove();
       discoveryFinishedListener.remove();
       connectedListener.remove();
@@ -615,31 +436,6 @@ const ListMessageScreen = () => {
       connectionLostListener.remove();
       connectionFailedListener.remove();
     };
-  }, []);
-
-  const autoRename = useCallback(async () => {
-    try {
-      let bluetoothName = await BluetoothModule.getBluetoothName();
-
-      if (!bluetoothName.startsWith('BLE')) {
-        bluetoothName = 'BLE' + bluetoothName;
-        await BluetoothModule.setBluetoothName(bluetoothName);
-
-        let retry = 0;
-        while (retry < 5) {
-          const currentName = await BluetoothModule.getBluetoothName();
-          if (currentName === bluetoothName) {
-            console.log('✅ Đổi tên Bluetooth thành công:', currentName);
-            return;
-          }
-          await new Promise(res => setTimeout(res, 1000));
-          retry++;
-        }
-        console.warn('⚠️ Đổi tên Bluetooth thất bại sau 5 lần thử');
-      }
-    } catch (err) {
-      console.error('❌ Lỗi khi đổi tên Bluetooth:', err);
-    }
   }, []);
 
   useEffect(() => {
@@ -655,14 +451,6 @@ const ListMessageScreen = () => {
 
       const enabled = await checkAndEnableBluetooth();
       if (enabled) {
-        // Lấy và lưu bluetooth name
-        try {
-          const name = await BluetoothModule.getBluetoothName();
-          setBluetoothName(name);
-        } catch (error) {
-          console.error('Error getting bluetooth name:', error);
-        }
-        
         await autoRename();
         await initializeBluetoothServer();
       }
@@ -675,12 +463,6 @@ const ListMessageScreen = () => {
       BluetoothModule.stopDiscovery().catch(console.error);
     };
   }, []);
-
-  useEffect(() => {
-    if (isEnabled) {
-      initializeBluetoothServer();
-    }
-  }, [isEnabled, initializeBluetoothServer]);
 
   const handleConected = async (
     isConnectedDevice: boolean,
@@ -708,85 +490,68 @@ const ListMessageScreen = () => {
         Alert.alert(
           '⏳ Đang đồng bộ...',
           'Vui lòng chờ giây lát để đồng bộ thông tin room',
-          [{
-            text: 'OK',
-            onPress: () => {
-              // Thử lại sau 2s
-              setTimeout(() => {
-                const updatedRoomInfo = roomInfoRef.current[item.address];
-                if (updatedRoomInfo) {
-                  console.log('updatedRoomInfo', updatedRoomInfo);
-                  // navigate('ChatStack', {
-                  //   screen: 'Message',
-                  //   params: {
-                  //     name: item.name,
-                  //     roomId: updatedRoomInfo.roomId,
-                  //     receiver: updatedRoomInfo.receiver,
-                  //   },
-                  // });
-                } else {
-                  Alert.alert('❌ Lỗi', 'Không thể đồng bộ thông tin room. Vui lòng thử lại.');
-                }
-              }, 2000);
-            }
-          }]
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Thử lại sau 2s
+                setTimeout(() => {
+                  const updatedRoomInfo = roomInfoRef.current[item.address];
+                  if (updatedRoomInfo) {
+                    console.log('updatedRoomInfo', updatedRoomInfo);
+                    // navigate('ChatStack', {
+                    //   screen: 'Message',
+                    //   params: {
+                    //     name: item.name,
+                    //     roomId: updatedRoomInfo.roomId,
+                    //     receiver: updatedRoomInfo.receiver,
+                    //   },
+                    // });
+                  } else {
+                    Alert.alert(
+                      '❌ Lỗi',
+                      'Không thể đồng bộ thông tin room. Vui lòng thử lại.',
+                    );
+                  }
+                }, 2000);
+              },
+            },
+          ],
         );
       }
     }
   };
 
-  const renderDevice = ({item}: {item: BluetoothDevice}) => {
-    const isConnectedDevice = connectedDevices.some(
-      d => d.address === item.address,
-    );
+  const renderDevice = useCallback(
+    ({item}: {item: BluetoothDevice}) => {
+      const isConnectedDevice = connectedDevices.some(
+        d => d.address === item.address,
+      );
 
-    return (
-      <TouchableOpacity onPress={() => handleConected(isConnectedDevice, item)}>
-        <Box
-          backgroundColor="white"
-          p={16}
-          mb={10}
-          borderRadius={12}
-          flexDirection="row"
-          alignItems="center">
-          <Box flex={1}>
-            <Text fontSize={17} fontWeight="bold" color="#333">
-              {formatName(item.name) || 'Unknown'} {isConnectedDevice && '✅'}
-            </Text>
-            <Text fontSize={12} color="#999">
-              {item.address}
-            </Text>
-          </Box>
-          <TouchableOpacity
-            onPress={() =>
-              isConnectedDevice ? disconnect(item.address) : connectTo(item)
-            }>
-            <Box
-              backgroundColor={isConnectedDevice ? '#FF3B30' : 'red'}
-              py={8}
-              px={16}
-              borderRadius={8}>
-              <Text color="white" fontWeight="bold">
-                {isConnectedDevice ? 'Ngắt' : 'Kết nối'}
-              </Text>
-            </Box>
-          </TouchableOpacity>
-        </Box>
-      </TouchableOpacity>
-    );
-  };
+      return (
+        <DeviceItem
+          item={item}
+          isConnectedDevice={isConnectedDevice}
+          onConnected={handleConected}
+          connectTo={connectTo}
+          disconnect={disconnect}
+        />
+      );
+    },
+    [connectedDevices, connectTo, disconnect, handleConected],
+  );
 
   const handleChatAI = async () => {
-    const ai = await getUserByAttributes({ system: true });
+    const ai = await getUserByAttributes({system: true});
     console.log('ai', ai);
-    if(!user?.id || !ai?.id) return;
-    const room = await getRoomByMember(user?.id,ai?.id)
+    if (!user?.id || !ai?.id) return;
+    const room = await getRoomByMember(user?.id, ai?.id);
     navigate('ChatStack', {
       screen: 'ChatAIScreen',
-      params:{
-        roomId:room.id,
-        receiver: ai
-      }
+      params: {
+        roomId: room.id,
+        receiver: ai,
+      },
     });
   };
   return (
@@ -870,8 +635,7 @@ const ListMessageScreen = () => {
             />
           }
           ListHeaderComponent={
-            <TouchableOpacity
-              onPress={handleChatAI}>
+            <TouchableOpacity onPress={handleChatAI}>
               <Box
                 backgroundColor="white"
                 p={16}
