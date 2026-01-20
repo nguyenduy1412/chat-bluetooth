@@ -30,6 +30,7 @@ import {Room} from '@/database/entities/Room';
 import {useCreateUser} from '@/features/auth/hooks/useCreateUser';
 import {RoomRepository} from '@/database/repositories/RoomRepository';
 import {UserRepository} from '@/database/repositories/UserRepository';
+import {createRoom} from '@/features/chat/api/createRoom';
 
 const roomRepo = new RoomRepository();
 const userRepo = new UserRepository();
@@ -136,8 +137,10 @@ const ListMessageScreen = () => {
         return;
       }
 
-      // ✅ CHỈ LƯU ROOM INFO, KHÔNG TẠO ROOM MỚI
-      // Room đã được tạo bởi bên Responder
+      // ✅ LƯU ROOM VÀO DATABASE
+      // Với deterministic ID, createRoom sẽ tìm thấy room có sẵn hoặc tạo mới
+      await createRoom(room);
+      console.log('✅ Room saved to database:', room.id);
 
       // Lưu room info vào ref
       roomInfoRef.current[receiverAddress] = {

@@ -75,14 +75,9 @@ const MessageScreen = () => {
   };
 
   const handleSendMessage = async (text: string) => {
-    console.log('Sending message:', text,connectedDevices);
+    console.log('Sending message:', text, connectedDevices);
     const trimmedText = text.trim();
-    if (
-      
-      
-      trimmedText === '' ||
-      !route.params?.roomId
-    ) {
+    if (trimmedText === '' || !route.params?.roomId) {
       return;
     }
     try {
@@ -201,10 +196,12 @@ const MessageScreen = () => {
             status: 'sent',
             createdAt: new Date(),
             width,
-            height
+            height,
           };
 
-          await BluetoothModule.sendMessageToAll(JSON.stringify(newMessageItem));
+          await BluetoothModule.sendMessageToAll(
+            JSON.stringify(newMessageItem),
+          );
 
           await new Promise(resolve => setTimeout(resolve, 50));
         }
@@ -220,7 +217,7 @@ const MessageScreen = () => {
   const handleSearch = () => {};
   return (
     <Box style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+      <StatusBar barStyle="light-content" backgroundColor={'#4FACFE'} />
       <HeaderChat name={route.params.receiver?.name} onSearch={handleSearch} />
 
       <CustomChatView
