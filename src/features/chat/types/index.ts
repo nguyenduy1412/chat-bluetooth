@@ -33,4 +33,8 @@ export interface ImageChunk {
   timestamp: number;
   senderName: string;
   deviceAddress: string;
+  width?: number;
+  height?: number;
+  roomId?: string;
+  created_by?: string;
 }

@@ -137,10 +137,9 @@ const ListMessageScreen = () => {
     const {message, senderName, deviceAddress} = data;
 
     console.log('📩 Received message in index:', message);
-    let jsonData;
-    // Thử parse JSON trước
+    
     try {
-      jsonData = JSON.parse(message);
+      const jsonData = JSON.parse(message);
 
       // Xử lý USER_INFO protocol
       if (jsonData.type === 'USER_INFO') {
@@ -153,77 +152,49 @@ const ListMessageScreen = () => {
         handleRoomInfo(jsonData.room, jsonData.user, deviceAddress);
         return;
       }
-    } catch (e) {
-      // Không phải JSON, xử lý như protocol cũ
-    }
 
-    // Xử lý tin nhắn ảnh (vẫn dùng protocol cũ)
-    if (message.startsWith('IMG_START|')) {
-      handleImageStart(message, senderName, deviceAddress);
-    } else if (message.startsWith('IMG_CHUNK|')) {
-      handleImageChunk(message, senderName, deviceAddress);
-    } else if (message.startsWith('IMG_END|')) {
-      handleImageEnd(message, senderName, deviceAddress);
-    } else {
-      // Tin nhắn text thông thường
-      console.log('📨 Text message from', jsonData);
+      // Xử lý MessageEntity (text hoặc image chunk)
+      if (jsonData.id && jsonData.roomId) {
+        if (jsonData.type === 'text') {
+          // Tin nhắn text - lưu trực tiếp vào DB
+          console.log('📨 Text message from', jsonData.created_by);
+          await createMessage(jsonData);
+        } else if (jsonData.type === 'image') {
+          // Tin nhắn ảnh - ghép các chunk lại
+          await handleImageChunk(jsonData, deviceAddress);
+        }
+        return;
+      }
+    } catch (e) {
+      console.error('❌ Error parsing message:', e);
     }
   };
 
-  const handleImageStart = async (
-    message: string,
-    senderName: string,
+  const handleImageChunk = async (
+    messageEntity: any,
     deviceAddress: string,
   ) => {
-    const parts = message.split('|');
-    const messageId = parts[1];
-    const totalChunks = parseInt(parts[2]);
-    const timestamp = parseInt(parts[3]);
+    const {id: messageId, message: chunk, width, height, roomId, created_by, createdAt} = messageEntity;
 
-    console.log(`📸 Image start: ${messageId}, ${totalChunks} chunks`);
-
-    // Khởi tạo storage cho ảnh
-    imageChunksRef.current[messageId] = {
-      chunks: new Array(totalChunks).fill(''),
-      totalChunks,
-      receivedChunks: 0,
-      timestamp,
-      senderName,
-      deviceAddress,
-    };
-
-    // Lưu placeholder vào DB với ID cố định
-    // await saveMessageToDB({
-    //   id: messageId,
-    //   message: '📷 Đang nhận ảnh...',
-    //   createdAt: new Date(timestamp),
-    //   createdBy: {
-    //     id: senderAddress,
-    //     name: senderName,
-    //   },
-    //   type: 'text',
-    //   status: 'sending',
-    // });
-  };
-
-  const handleImageChunk = (
-    message: string,
-    senderName: string,
-    senderAddress: string,
-  ) => {
-    const parts = message.split('|');
-    const messageId = parts[1];
-    const chunkIndex = parseInt(parts[2]);
-    const chunkData = parts[3];
-
-    const imageData = imageChunksRef.current[messageId];
-    if (!imageData) {
-      console.warn('⚠️ Received chunk for unknown image:', messageId);
-      return;
+    // Khởi tạo storage nếu chưa có
+    if (!imageChunksRef.current[messageId]) {
+      imageChunksRef.current[messageId] = {
+        chunks: [],
+        totalChunks: 10, // Theo logic gửi
+        receivedChunks: 0,
+        timestamp: new Date(createdAt).getTime(),
+        senderName: '',
+        deviceAddress,
+        width,
+        height,
+        roomId,
+        created_by,
+      };
+      console.log(`📸 Image start: ${messageId}`);
     }
 
-    // Lưu chunk
-    imageData.chunks[chunkIndex] = chunkData;
+    const imageData = imageChunksRef.current[messageId];
+    imageData.chunks.push(chunk);
     imageData.receivedChunks++;
 
     const progress = Math.round(
@@ -231,71 +202,40 @@ const ListMessageScreen = () => {
     );
 
     console.log(
-      `📦 Chunk ${chunkIndex + 1}/${imageData.totalChunks} (${progress}%)`,
-    );
-  };
-
-  const handleImageEnd = async (
-    message: string,
-    senderName: string,
-    senderAddress: string,
-  ) => {
-    const parts = message.split('|');
-    const messageId = parts[1];
-
-    const imageData = imageChunksRef.current[messageId];
-    if (!imageData) {
-      console.warn('⚠️ Received end for unknown image:', messageId);
-      return;
-    }
-
-    // Ghép tất cả chunks
-    const base64Image = imageData.chunks.join('');
-
-    console.log(
-      `✅ Image received: ${messageId}, ${(base64Image.length / 1024).toFixed(
-        1,
-      )}KB`,
-    );
-    const {width, height} = await getSizeImage(
-      `data:image/jpeg;base64,${base64Image}`,
+      `📦 Chunk ${imageData.receivedChunks}/${imageData.totalChunks} (${progress}%)`,
     );
 
-    // Cập nhật message trong DB với ảnh hoàn chỉnh
-    try {
-      const currentUserId = user?.id;
-      const senderId = imageData.deviceAddress;
+    // Khi nhận đủ chunks, ghép lại và lưu
+    if (imageData.receivedChunks >= imageData.totalChunks) {
+      const base64Image = imageData.chunks.join('');
 
-      if (!currentUserId || !senderId) {
-        console.error('❌ Missing user IDs');
-        return;
+      console.log(
+        `✅ Image received: ${messageId}, ${(base64Image.length / 1024).toFixed(
+          1,
+        )}KB`,
+      );
+
+      try {
+        await createMessage({
+          id: messageId,
+          message: base64Image,
+          createdAt: new Date(imageData.timestamp),
+          type: 'image',
+          width: imageData.width,
+          height: imageData.height,
+          roomId: imageData.roomId,
+          created_by: imageData.created_by,
+          status: 'delivered',
+        });
+
+        console.log('✅ Image saved to DB:', messageId);
+      } catch (error) {
+        console.error('❌ Error saving image to DB:', error);
       }
 
-      const room = await getRoomByMember(currentUserId, senderId);
-
-      await createMessage({
-        id: messageId,
-        message: `data:image/jpeg;base64,${base64Image}`,
-        createdAt: new Date(imageData.timestamp),
-        createdBy: {
-          id: senderId,
-          name: imageData.senderName,
-        },
-        type: 'image',
-        width,
-        height,
-        roomId: room.id,
-        created_by: senderId,
-        status: 'delivered',
-      });
-
-      console.log('✅ Image saved to DB:', messageId);
-    } catch (error) {
-      console.error('❌ Error saving image to DB:', error);
+      // Xóa khỏi ref
+      delete imageChunksRef.current[messageId];
     }
-
-    // Xóa khỏi ref
-    delete imageChunksRef.current[messageId];
   };
 
   useEffect(() => {

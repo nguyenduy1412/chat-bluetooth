@@ -6,8 +6,8 @@ import { queryClient } from '@/lib/react-query';
 export const useCreateMessage = () => {
   return useMutation({
     mutationFn: (data: MessageEntity) => createMessage(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages'] });
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['messages', data.roomId] });
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
     },
   });

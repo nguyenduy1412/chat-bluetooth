@@ -191,12 +191,6 @@ const ChatAIScreen = () => {
     [llm, user, createMessage, messages],
   );
 
-  const statusText = useMemo(() => {
-    return `${activeModel || 'LLAMA3_2_1B'} • ${
-      llm.isGenerating ? '⏳ Đang trả lời...' : '✅ Sẵn sàng'
-    }`;
-  }, [activeModel, llm.isGenerating]);
-
   if (!llm.isReady) {
     return (
       <Box flex={1} backgroundColor={colors.white}>

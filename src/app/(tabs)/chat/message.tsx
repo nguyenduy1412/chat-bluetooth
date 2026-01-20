@@ -43,49 +43,17 @@ const MessageScreen = () => {
   const insets = useSafeAreaInsets();
 
   // Fetch messages từ DB theo roomId
-  const {data: messagesFromDB = [], refetch: refetchMessages} = useGetMessagesByRoomId(
+  const {data: messages, isLoading: isLoadingMessages} = useGetMessagesByRoomId(
     route?.params?.roomId,
   );
 
-  // Polling để cập nhật real-time (mỗi 2 giây)
   useEffect(() => {
-    const interval = setInterval(() => {
-      refetchMessages();
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [refetchMessages]);
-
-  useEffect(() => {
-    initBluetooth();
     setupBluetoothListeners();
 
     return () => {
       BluetoothModule.removeAllListeners();
     };
   }, []);
-
-  const initBluetooth = async () => {
-    try {
-      const name = await BluetoothModule.getBluetoothName();
-      const address = await BluetoothModule.getBluetoothAddress();
-      setBluetoothName(name);
-      setBluetoothAddress(address);
-
-      // Lấy danh sách thiết bị đã kết nối (trả về string[] là addresses)
-      const deviceAddresses = await BluetoothModule.getConnectedDevices();
-      const devices: BluetoothDevice[] = deviceAddresses.map(addr => ({
-        name: 'Connected Device',
-        address: addr,
-        paired: true,
-      }));
-      setConnectedDevices(devices);
-
-      console.log('✅ Bluetooth initialized:', name, address);
-    } catch (error) {
-      console.error('❌ Init Bluetooth error:', error);
-    }
-  };
 
   const setupBluetoothListeners = () => {
     // Chỉ lắng nghe kết nối/ngắt kết nối
@@ -106,39 +74,28 @@ const MessageScreen = () => {
   };
 
   const handleSendMessage = async (text: string) => {
-    if (connectedDevices.length === 0) {
-      Alert.alert(
-        '⚠️ Chưa kết nối',
-        'Vui lòng kết nối với thiết bị khác trước',
-      );
+    const trimmedText = text.trim();
+    if (
+      connectedDevices.length === 0 ||
+      trimmedText === '' ||
+      !route.params?.roomId
+    ) {
       return;
     }
-
     try {
-      // Gửi qua Bluetooth
-      await BluetoothModule.sendMessageToAll(text);
-      
-      // Lưu vào DB
-      await createMessage({
+      const newMessage: MessageEntity = {
         id: v4(),
-        message: text,
-        createdAt: new Date(),
-        createdBy: {
-          id: user?.id || bluetoothAddress || 'me',
-          name: user?.name || bluetoothName || 'Tôi',
-        },
-        created_by: user?.id || bluetoothAddress || 'me',
-        roomId: route?.params?.roomId || '',
+        message: trimmedText,
+        roomId: route.params?.roomId,
+        created_by: user?.id,
         type: 'text',
         status: 'sent',
-      } as any);
-      
-      // Refetch để cập nhật UI
-      refetchMessages();
-      
-      console.log('✅ Sent message:', text);
-    } catch (error: any) {
-      console.error('❌ Send error:', error);
+        createdAt: new Date(),
+      };
+      console.log('newMessage', newMessage);
+      await BluetoothModule.sendMessageToAll(JSON.stringify(newMessage));
+      await createMessage(newMessage);
+    } catch (err) {
       Alert.alert('❌ Lỗi', 'Không thể gửi tin nhắn');
     }
   };
@@ -204,31 +161,9 @@ const MessageScreen = () => {
           'base64',
         );
 
-        const messageId = `img_${Date.now()}`;
-        const timestamp = Date.now();
         const {width, height} = await getSizeImage(
           `data:image/jpeg;base64,${base64Image}`,
         );
-
-        // Lưu vào DB trước khi gửi
-        await createMessage({
-          id: messageId,
-          message: `data:image/jpeg;base64,${base64Image}`,
-          createdAt: new Date(timestamp),
-          createdBy: {
-            id: user?.id || bluetoothAddress || 'me',
-            name: user?.name || bluetoothName || 'Tôi',
-          },
-          created_by: user?.id || bluetoothAddress || 'me',
-          type: 'image',
-          width,
-          height,
-          roomId: route?.params?.roomId || '',
-          status: 'sending',
-        } as any);
-        
-        // Refetch để hiển thị ngay
-        refetchMessages();
 
         const TOTAL_CHUNKS = 10;
         const chunkSize = Math.ceil(base64Image.length / TOTAL_CHUNKS);
@@ -239,21 +174,38 @@ const MessageScreen = () => {
           const end = Math.min(start + chunkSize, base64Image.length);
           chunks.push(base64Image.substring(start, end));
         }
-
-        await BluetoothModule.sendMessageToAll(
-          `IMG_START|${messageId}|${TOTAL_CHUNKS}|${timestamp}`,
-        );
+        const idMessage = v4();
+        const newMessage: MessageEntity = {
+          id: idMessage,
+          message: base64Image,
+          roomId: route.params?.roomId,
+          created_by: user?.id,
+          type: 'image',
+          status: 'sent',
+          createdAt: new Date(),
+          width,
+          height,
+        };
         await new Promise(resolve => setTimeout(resolve, 100));
 
         for (let i = 0; i < chunks.length; i++) {
-          await BluetoothModule.sendMessageToAll(
-            `IMG_CHUNK|${messageId}|${i}|${chunks[i]}`,
-          );
+          const newMessageItem: MessageEntity = {
+            id: idMessage,
+            message: chunks[i],
+            roomId: route.params?.roomId,
+            created_by: user?.id,
+            type: 'image',
+            status: 'sent',
+            createdAt: new Date(),
+            width,
+            height
+          };
+
+          await BluetoothModule.sendMessageToAll(JSON.stringify(newMessageItem));
+
           await new Promise(resolve => setTimeout(resolve, 50));
         }
-
-        await BluetoothModule.sendMessageToAll(`IMG_END|${messageId}`);
-
+        await createMessage(newMessage);
         setIsLoading(false);
       }
     } catch (error: any) {
@@ -262,16 +214,14 @@ const MessageScreen = () => {
       Alert.alert('❌ Lỗi', error.message || 'Không thể chọn/gửi ảnh');
     }
   };
-  const handleSearch = () =>{
-
-  }
+  const handleSearch = () => {};
   return (
     <Box style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       <HeaderChat name={route.params.receiver?.name} onSearch={handleSearch} />
 
       <CustomChatView
-        messages={messagesFromDB}
+        messages={messages || []}
         currentUserId={user?.id || bluetoothAddress || 'me'}
         currentUserName={user?.name || bluetoothName || 'Tôi'}
         onSend={handleSendMessage}
