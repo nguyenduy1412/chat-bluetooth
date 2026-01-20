@@ -6,7 +6,7 @@ export type RootNavigatorParamList = {
   ChatStack: NavigatorScreenParams<ChatStackParamList>
   SettingStack: NavigatorScreenParams<SettingsStackParamList>
   MessageScreen:{
-    name?:string;
+    receiver?:User;
     roomId?: string;
   }
   ChatAIScreen:{

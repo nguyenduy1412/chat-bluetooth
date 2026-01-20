@@ -17,6 +17,7 @@ import {ItemSetting} from '../../../features/settings/types';
 import ScreenHeader from '../../../components/header/ScreenHeader';
 import {
   confirmPlatformPayPayment,
+  PlatformPay,
 } from '@stripe/stripe-react-native';
 import {STRIPE_PUBLISHABLE_KEY, SUPABASE_FUNCTIONS, SUPABASE_ANON_KEY} from '@/constant';
 const width = Dimensions.get('window').width - 60;
@@ -158,7 +159,7 @@ const SettingsScreen = () => {
       
       Alert.alert('Success', 'The payment was confirmed successfully.');
       console.log(JSON.stringify(paymentIntent, null, 2));
-    } catch (err) {
+    } catch (err:any) {
       console.error('Payment failed:', err);
       Alert.alert('Error', err.message || 'Payment failed');
     }

@@ -12,23 +12,28 @@ import {Box} from '../../../components/common/Layout/Box';
 import {ArrowLeft} from 'lucide-react-native';
 import {colors} from '../../../theme/colors';
 import {Text} from '../../../components/common/Text/Text';
-import { goBack, navigate } from '../../../utils/navigationUtils';
-import { formatName } from '../../../features/chat/utils/formatName';
-import { RouteProp, useRoute } from '@react-navigation/native';
-import { RootNavigatorParamList } from '../../../types/navigation-type';
-import { MessageEntity } from '@/database/entities/MessageEntity';
+import {goBack, navigate} from '../../../utils/navigationUtils';
+import {formatName} from '../../../features/chat/utils/formatName';
+import {RouteProp, useRoute} from '@react-navigation/native';
+import {RootNavigatorParamList} from '../../../types/navigation-type';
+import {MessageEntity} from '@/database/entities/MessageEntity';
+import {userStore} from '@/store/userStore';
+import {useGetMessagesByRoomId} from '@/features/chat/hooks/useGetMessagesByRoomId';
+import {createMessage} from '@/features/chat/api/createMessage';
+import {v4} from 'uuid';
+import HeaderChat from '@/features/chat/components/HeaderChat';
 
 interface BluetoothDevice {
   name: string;
   address: string;
   paired?: boolean;
 }
-type DeviceProp={
+type DeviceProp = {
   name: string;
-}
+};
 const MessageScreen = () => {
   const route = useRoute<RouteProp<RootNavigatorParamList, 'MessageScreen'>>();
-  const [messages, setMessages] = useState<MessageEntity[]>([]);
+  const {user} = userStore();
   const [bluetoothName, setBluetoothName] = useState<string>('');
   const [bluetoothAddress, setBluetoothAddress] = useState<string>('');
   const [connectedDevices, setConnectedDevices] = useState<BluetoothDevice[]>(
@@ -37,16 +42,19 @@ const MessageScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const insets = useSafeAreaInsets();
 
-  const imageChunksRef = useRef<{
-    [key: string]: {
-      chunks: string[];
-      totalChunks: number;
-      receivedChunks: number;
-      timestamp: number;
-      senderName: string;
-      senderAddress: string;
-    };
-  }>({});
+  // Fetch messages từ DB theo roomId
+  const {data: messagesFromDB = [], refetch: refetchMessages} = useGetMessagesByRoomId(
+    route?.params?.roomId,
+  );
+
+  // Polling để cập nhật real-time (mỗi 2 giây)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetchMessages();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [refetchMessages]);
 
   useEffect(() => {
     initBluetooth();
@@ -80,13 +88,7 @@ const MessageScreen = () => {
   };
 
   const setupBluetoothListeners = () => {
-    // Lắng nghe tin nhắn đến
-    BluetoothModule.addEventListener(
-      'onMessageReceived',
-      handleMessageReceived,
-    );
-
-    // Lắng nghe kết nối mới
+    // Chỉ lắng nghe kết nối/ngắt kết nối
     BluetoothModule.addEventListener('onConnected', info => {
       const device: BluetoothDevice = {
         name: info.deviceName,
@@ -94,195 +96,13 @@ const MessageScreen = () => {
         paired: true,
       };
       setConnectedDevices(prev => [...prev, device]);
-      addSystemMessage(`${info.deviceName} đã kết nối`);
     });
 
-    // Lắng nghe ngắt kết nối
     BluetoothModule.addEventListener('onDisconnected', info => {
       setConnectedDevices(prev =>
         prev.filter(d => d.address !== info.deviceAddress),
       );
-      addSystemMessage(`Đã ngắt kết nối`);
     });
-
-    // Lắng nghe nhận ảnh
-    BluetoothModule.addEventListener('onImageReceived', data => {
-      console.log('📸 Image received:', data.filePath);
-      addMessage({
-        id: `img_${Date.now()}`,
-        message: `file://${data.filePath}`,
-        createdAt: new Date(),
-        createdBy: {
-          id: data.deviceAddress,
-          name: data.deviceName,
-        },
-        type: 'image',
-        roomId: route?.params?.roomId || '',
-      });
-    });
-  };
-
-  const handleMessageReceived = (data: any) => {
-    const {message, senderName, senderAddress} = data;
-
-    console.log('📩 Received:', message);
-
-    // Xử lý tin nhắn ảnh
-    if (message.startsWith('IMG_START|')) {
-      handleImageStart(message, senderName, senderAddress);
-    } else if (message.startsWith('IMG_CHUNK|')) {
-      handleImageChunk(message, senderName, senderAddress);
-    } else if (message.startsWith('IMG_END|')) {
-      handleImageEnd(message, senderName, senderAddress);
-    } else {
-      // Tin nhắn text thông thường
-      addMessage({
-        id: `${senderAddress}_${Date.now()}`,
-        message: message,
-        createdAt: new Date(),
-        createdBy: {
-          id: senderAddress,
-          name: senderName,
-        },
-        type: 'text',
-        roomId: route?.params?.roomId || '',
-      });
-    }
-  };
-
-  const handleImageStart = (
-    message: string,
-    senderName: string,
-    senderAddress: string,
-  ) => {
-    const parts = message.split('|');
-    const messageId = parts[1];
-    const totalChunks = parseInt(parts[2]);
-    const timestamp = parseInt(parts[3]);
-
-    console.log(`📸 Image start: ${messageId}, ${totalChunks} chunks`);
-
-    // Khởi tạo storage cho ảnh
-    imageChunksRef.current[messageId] = {
-      chunks: new Array(totalChunks).fill(''),
-      totalChunks,
-      receivedChunks: 0,
-      timestamp,
-      senderName,
-      senderAddress,
-    };
-
-    // Thêm message placeholder
-    addMessage({
-      id: messageId,
-      message: '📷 Đang nhận ảnh...',
-      createdAt: new Date(timestamp),
-      createdBy: {
-        id: senderAddress,
-        name: senderName,
-      },
-      type: 'text',
-      roomId: route?.params?.roomId || '',
-    });
-  };
-
-  const handleImageChunk = (
-    message: string,
-    senderName: string,
-    senderAddress: string,
-  ) => {
-    const parts = message.split('|');
-    const messageId = parts[1];
-    const chunkIndex = parseInt(parts[2]);
-    const chunkData = parts[3];
-
-    const imageData = imageChunksRef.current[messageId];
-    if (!imageData) {
-      console.warn('⚠️ Received chunk for unknown image:', messageId);
-      return;
-    }
-
-    // Lưu chunk
-    imageData.chunks[chunkIndex] = chunkData;
-    imageData.receivedChunks++;
-
-    const progress = Math.round(
-      (imageData.receivedChunks / imageData.totalChunks) * 100,
-    );
-
-    console.log(
-      `📦 Chunk ${chunkIndex + 1}/${imageData.totalChunks} (${progress}%)`,
-    );
-
-    // Cập nhật progress
-    setMessages(prev =>
-      prev.map(msg =>
-        msg.id === messageId
-          ? {...msg, message: `📷 Đang nhận ảnh... ${progress}%`}
-          : msg,
-      ),
-    );
-  };
-
-  const handleImageEnd = async (
-    message: string,
-    senderName: string,
-    senderAddress: string,
-  ) => {
-    const parts = message.split('|');
-    const messageId = parts[1];
-
-    const imageData = imageChunksRef.current[messageId];
-    if (!imageData) {
-      console.warn('⚠️ Received end for unknown image:', messageId);
-      return;
-    }
-
-    // Ghép tất cả chunks
-    const base64Image = imageData.chunks.join('');
-
-    console.log(
-      `✅ Image received: ${messageId}, ${(base64Image.length / 1024).toFixed(
-        1,
-      )}KB`,
-    );
-    const {width, height} = await getSizeImage(
-      `data:image/jpeg;base64,${base64Image}`,
-    );
-    // Cập nhật message với ảnh
-    setMessages(prev =>
-      prev.map(msg =>
-        msg.id === messageId
-          ? {
-              ...msg,
-              message: '',
-              image: `data:image/jpeg;base64,${base64Image}`,
-              width,
-              height,
-            }
-          : msg,
-      ),
-    );
-
-    // Xóa khỏi ref
-    delete imageChunksRef.current[messageId];
-  };
-
-  const addMessage = (message: MessageEntity) => {
-    setMessages(previousMessages => [message, ...previousMessages]);
-  };
-
-  const addSystemMessage = (text: string) => {
-    // addMessage({
-    //   id: `system_${Date.now()}`,
-    //   message: text,
-    //   createdAt: new Date(),
-    //   user: {
-    //     _id: 0,
-    //     name: 'System',
-    //   },
-    //   system: true,
-    // });
   };
 
   const handleSendMessage = async (text: string) => {
@@ -294,21 +114,28 @@ const MessageScreen = () => {
       return;
     }
 
-    const newMessage: MessageEntity = {
-      id: `msg_${Date.now()}`,
-      message: text,
-      createdAt: new Date(),
-      createdBy: {
-        id: bluetoothAddress || 'me',
-        name: bluetoothName || 'Tôi',
-      },
-      roomId: route?.params?.roomId || '',
-      type: 'text',
-    };
-
     try {
+      // Gửi qua Bluetooth
       await BluetoothModule.sendMessageToAll(text);
-      addMessage(newMessage);
+      
+      // Lưu vào DB
+      await createMessage({
+        id: v4(),
+        message: text,
+        createdAt: new Date(),
+        createdBy: {
+          id: user?.id || bluetoothAddress || 'me',
+          name: user?.name || bluetoothName || 'Tôi',
+        },
+        created_by: user?.id || bluetoothAddress || 'me',
+        roomId: route?.params?.roomId || '',
+        type: 'text',
+        status: 'sent',
+      } as any);
+      
+      // Refetch để cập nhật UI
+      refetchMessages();
+      
       console.log('✅ Sent message:', text);
     } catch (error: any) {
       console.error('❌ Send error:', error);
@@ -383,19 +210,25 @@ const MessageScreen = () => {
           `data:image/jpeg;base64,${base64Image}`,
         );
 
-        addMessage({
+        // Lưu vào DB trước khi gửi
+        await createMessage({
           id: messageId,
-          message: '',
+          message: `data:image/jpeg;base64,${base64Image}`,
           createdAt: new Date(timestamp),
           createdBy: {
-            id: bluetoothAddress || 'me',
-            name: bluetoothName || 'Tôi',
+            id: user?.id || bluetoothAddress || 'me',
+            name: user?.name || bluetoothName || 'Tôi',
           },
+          created_by: user?.id || bluetoothAddress || 'me',
           type: 'image',
           width,
           height,
           roomId: route?.params?.roomId || '',
-        });
+          status: 'sending',
+        } as any);
+        
+        // Refetch để hiển thị ngay
+        refetchMessages();
 
         const TOTAL_CHUNKS = 10;
         const chunkSize = Math.ceil(base64Image.length / TOTAL_CHUNKS);
@@ -429,32 +262,18 @@ const MessageScreen = () => {
       Alert.alert('❌ Lỗi', error.message || 'Không thể chọn/gửi ảnh');
     }
   };
+  const handleSearch = () =>{
 
+  }
   return (
     <Box style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
-      <Box
-        pt={insets.top + 10}
-        backgroundColor={colors.primary}
-        px={20}
-        pb={20}
-        gap={10}
-        flexDirection="row"
-        alignItems="center"
-        onPress={()=>{
-          goBack()
-        }}
-        >
-        <ArrowLeft color={colors.white} />
-        <Text fontSize={20} color={colors.white}>
-          {formatName(route?.params?.name)}
-        </Text>
-      </Box>
+      <HeaderChat name={route.params.receiver?.name} onSearch={handleSearch} />
 
       <CustomChatView
-        messages={messages}
-        currentUserId={bluetoothAddress || 'me'}
-        currentUserName={bluetoothName || 'Tôi'}
+        messages={messagesFromDB}
+        currentUserId={user?.id || bluetoothAddress || 'me'}
+        currentUserName={user?.name || bluetoothName || 'Tôi'}
         onSend={handleSendMessage}
         onImagePress={pickImage}
         placeholder="Nhập tin nhắn..."

@@ -1,4 +1,4 @@
-import {useEffect, useState, useCallback} from 'react';
+import {useEffect, useState, useCallback, useRef} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,9 @@ import {formatName} from '../../../features/chat/utils/formatName';
 import { getUserByAttributes } from '@/features/auth/api/getUserByAttributes';
 import { getRoomByMember } from '@/features/chat/api/getRoomByMember';
 import { userStore } from '@/store/userStore';
+import { getSizeImage } from '@/utils/getSizeImage';
+import { createMessage } from '@/features/chat/api/createMessage';
+import { v4 } from 'uuid';
 
 // Interface cho device
 interface BluetoothDevice {
@@ -38,6 +41,26 @@ const ListMessageScreen = () => {
     [],
   );
   const {user} = userStore();
+  const [bluetoothName, setBluetoothName] = useState<string>('');
+
+  // Lưu room info cho mỗi device (key là deviceAddress)
+  const roomInfoRef = useRef<{
+    [deviceAddress: string]: {
+      roomId: string;
+      receiver: any;
+    };
+  }>({});
+
+  const imageChunksRef = useRef<{
+    [key: string]: {
+      chunks: string[];
+      totalChunks: number;
+      receivedChunks: number;
+      timestamp: number;
+      senderName: string;
+      senderAddress: string;
+    };
+  }>({});
   const loadData = async () => {
     try {
     } catch (error) {
@@ -100,9 +123,32 @@ const ListMessageScreen = () => {
   // ✅ Kết nối tới thiết bị
   const connectTo = async (device: BluetoothDevice) => {
     try {
+      // Kiểm tra xem đã có kết nối với thiết bị này chưa
+      const isAlreadyConnected = connectedDevices.some(
+        d => d.address === device.address,
+      );
+
+      if (isAlreadyConnected) {
+        console.log('⚠️ Đã có kết nối với thiết bị này:', device.name);
+        Alert.alert(
+          '⚠️ Đã kết nối',
+          `Bạn đã kết nối với ${device.name} rồi`,
+          [{text: 'OK'}],
+        );
+        return;
+      }
+
+      console.log('🔌 Đang kết nối đến:', device.name);
       await BluetoothModule.connectToDevice(device.address);
     } catch (error: any) {
       console.error('Connect error:', error);
+      
+      // Không hiển thị alert nếu đã kết nối rồi
+      if (error.code === 'ALREADY_CONNECTED') {
+        console.log('⚠️ Native layer báo đã kết nối');
+        return;
+      }
+      
       Alert.alert(
         '❌ Kết nối thất bại',
         `Không thể kết nối với ${device.name}\n\n${
@@ -150,6 +196,279 @@ const ListMessageScreen = () => {
     }
   };
 
+  // ==================== XỬ LÝ TIN NHẮN ====================
+
+  const handleUserInfo = async (message: string, senderName: string, senderAddress: string) => {
+    try {
+      // Parse JSON: {type: 'USER_INFO', userId, userName, userEmail}
+      const data = JSON.parse(message);
+      const {userId: remoteUserId, userName: remoteUserName, userEmail: remoteUserEmail = ''} = data;
+
+      console.log('👤 Received user info from:', remoteUserName, remoteUserId);
+
+      if (!user?.id) {
+        console.error('❌ Current user not found');
+        return;
+      }
+
+      // Tạo hoặc lấy room giữa 2 user
+      const room = await getRoomByMember(user.id, remoteUserId);
+      
+      console.log('✅ Room created/found:', room.id);
+
+      // Lưu room info vào ref
+      roomInfoRef.current[senderAddress] = {
+        roomId: room.id,
+        receiver: {
+          id: remoteUserId,
+          name: remoteUserName,
+          email: remoteUserEmail,
+        },
+      };
+
+      // Gửi lại ROOM_INFO cho bên kia dưới dạng JSON
+      const roomInfoData = {
+        type: 'ROOM_INFO',
+        roomId: room.id,
+        userId: user.id,
+        userName: user.name || bluetoothName,
+        userEmail: user.email || '',
+      };
+      await BluetoothModule.sendMessageToAll(JSON.stringify(roomInfoData));
+      
+      console.log('📤 Sent room info back:', room.id);
+    } catch (error) {
+      console.error('❌ Error handling user info:', error);
+    }
+  };
+
+  const handleRoomInfo = (message: string, senderAddress: string) => {
+    try {
+      // Parse JSON: {type: 'ROOM_INFO', roomId, userId, userName, userEmail}
+      const data = JSON.parse(message);
+      const {roomId, userId: remoteUserId, userName: remoteUserName, userEmail: remoteUserEmail = ''} = data;
+
+      console.log('🏠 Received room info:', roomId);
+
+      // Lưu room info vào ref
+      roomInfoRef.current[senderAddress] = {
+        roomId,
+        receiver: {
+          id: remoteUserId,
+          name: remoteUserName,
+          email: remoteUserEmail,
+        },
+      };
+
+      console.log('✅ Room info saved for:', senderAddress);
+    } catch (error) {
+      console.error('❌ Error handling room info:', error);
+    }
+  };
+
+  const saveMessageToDB = async (messageData: any) => {
+    try {
+      // Tìm hoặc tạo room cho 2 người (current user và sender)
+      const currentUserId = user?.id;
+      const senderId = messageData.createdBy?.id || messageData.created_by;
+      
+      if (!currentUserId || !senderId) {
+        console.error('❌ Missing user IDs for room creation');
+        return;
+      }
+
+      // Lấy hoặc tạo room giữa 2 user
+      const room = await getRoomByMember(currentUserId, senderId);
+      
+      // Lưu message vào DB
+      const newMessage = await createMessage({
+        id: v4(),
+        ...messageData,
+        roomId: room.id,
+        created_by: senderId,
+      } as any);
+      
+      console.log('✅ Message saved to DB:', newMessage.id);
+    } catch (error) {
+      console.error('❌ Error saving message to DB:', error);
+    }
+  };
+
+  const handleMessageReceived = async (data: any) => {
+    const {message, senderName, senderAddress} = data;
+
+    console.log('📩 Received message in index:', message);
+
+    // Thử parse JSON trước
+    try {
+      const jsonData = JSON.parse(message);
+      
+      // Xử lý USER_INFO protocol
+      if (jsonData.type === 'USER_INFO') {
+        await handleUserInfo(message, senderName, senderAddress);
+        return;
+      }
+
+      // Xử lý ROOM_INFO protocol
+      if (jsonData.type === 'ROOM_INFO') {
+        handleRoomInfo(message, senderAddress);
+        return;
+      }
+    } catch (e) {
+      // Không phải JSON, xử lý như protocol cũ
+    }
+
+    // Xử lý tin nhắn ảnh (vẫn dùng protocol cũ)
+    if (message.startsWith('IMG_START|')) {
+      handleImageStart(message, senderName, senderAddress);
+    } else if (message.startsWith('IMG_CHUNK|')) {
+      handleImageChunk(message, senderName, senderAddress);
+    } else if (message.startsWith('IMG_END|')) {
+      handleImageEnd(message, senderName, senderAddress);
+    } else {
+      // Tin nhắn text thông thường
+      console.log('📨 Text message from', senderName, ':', message);
+      await saveMessageToDB({
+        message: message,
+        createdAt: new Date(),
+        createdBy: {
+          id: senderAddress,
+          name: senderName,
+        },
+        type: 'text',
+        status: 'delivered',
+      });
+    }
+  };
+
+  const handleImageStart = async (
+    message: string,
+    senderName: string,
+    senderAddress: string,
+  ) => {
+    const parts = message.split('|');
+    const messageId = parts[1];
+    const totalChunks = parseInt(parts[2]);
+    const timestamp = parseInt(parts[3]);
+
+    console.log(`📸 Image start: ${messageId}, ${totalChunks} chunks`);
+
+    // Khởi tạo storage cho ảnh
+    imageChunksRef.current[messageId] = {
+      chunks: new Array(totalChunks).fill(''),
+      totalChunks,
+      receivedChunks: 0,
+      timestamp,
+      senderName,
+      senderAddress,
+    };
+
+    // Lưu placeholder vào DB với ID cố định
+    await saveMessageToDB({
+      id: messageId,
+      message: '📷 Đang nhận ảnh...',
+      createdAt: new Date(timestamp),
+      createdBy: {
+        id: senderAddress,
+        name: senderName,
+      },
+      type: 'text',
+      status: 'sending',
+    });
+  };
+
+  const handleImageChunk = (
+    message: string,
+    senderName: string,
+    senderAddress: string,
+  ) => {
+    const parts = message.split('|');
+    const messageId = parts[1];
+    const chunkIndex = parseInt(parts[2]);
+    const chunkData = parts[3];
+
+    const imageData = imageChunksRef.current[messageId];
+    if (!imageData) {
+      console.warn('⚠️ Received chunk for unknown image:', messageId);
+      return;
+    }
+
+    // Lưu chunk
+    imageData.chunks[chunkIndex] = chunkData;
+    imageData.receivedChunks++;
+
+    const progress = Math.round(
+      (imageData.receivedChunks / imageData.totalChunks) * 100,
+    );
+
+    console.log(
+      `📦 Chunk ${chunkIndex + 1}/${imageData.totalChunks} (${progress}%)`,
+    );
+  };
+
+  const handleImageEnd = async (
+    message: string,
+    senderName: string,
+    senderAddress: string,
+  ) => {
+    const parts = message.split('|');
+    const messageId = parts[1];
+
+    const imageData = imageChunksRef.current[messageId];
+    if (!imageData) {
+      console.warn('⚠️ Received end for unknown image:', messageId);
+      return;
+    }
+
+    // Ghép tất cả chunks
+    const base64Image = imageData.chunks.join('');
+
+    console.log(
+      `✅ Image received: ${messageId}, ${(base64Image.length / 1024).toFixed(
+        1,
+      )}KB`,
+    );
+    const {width, height} = await getSizeImage(
+      `data:image/jpeg;base64,${base64Image}`,
+    );
+    
+    // Cập nhật message trong DB với ảnh hoàn chỉnh
+    try {
+      const currentUserId = user?.id;
+      const senderId = imageData.senderAddress;
+      
+      if (!currentUserId || !senderId) {
+        console.error('❌ Missing user IDs');
+        return;
+      }
+
+      const room = await getRoomByMember(currentUserId, senderId);
+      
+      await createMessage({
+        id: messageId,
+        message: `data:image/jpeg;base64,${base64Image}`,
+        createdAt: new Date(imageData.timestamp),
+        createdBy: {
+          id: senderId,
+          name: imageData.senderName,
+        },
+        type: 'image',
+        width,
+        height,
+        roomId: room.id,
+        created_by: senderId,
+        status: 'delivered',
+      });
+      
+      console.log('✅ Image saved to DB:', messageId);
+    } catch (error) {
+      console.error('❌ Error saving image to DB:', error);
+    }
+
+    // Xóa khỏi ref
+    delete imageChunksRef.current[messageId];
+  };
+
   useEffect(() => {
     const deviceFoundListener = BluetoothModule.addEventListener(
       'onDeviceFound',
@@ -179,10 +498,34 @@ const ListMessageScreen = () => {
       },
     );
 
+    // Listener: Tin nhắn nhận được
+    const messageReceivedListener = BluetoothModule.addEventListener(
+      'onMessageReceived',
+      async (data: any) => await handleMessageReceived(data),
+    );
+
+    // Listener: Ảnh nhận được (từ protocol Base64 cũ nếu có)
+    const imageReceivedListener = BluetoothModule.addEventListener(
+      'onImageReceived',
+      async (data: any) => {
+        console.log('📸 Image received:', data.filePath);
+        await saveMessageToDB({
+          message: `file://${data.filePath}`,
+          createdAt: new Date(),
+          createdBy: {
+            id: data.deviceAddress,
+            name: data.deviceName,
+          },
+          type: 'image',
+          status: 'delivered',
+        });
+      },
+    );
+
     // Listener: Kết nối thành công
     const connectedListener = BluetoothModule.addEventListener(
       'onConnected',
-      (info: {deviceName: string; deviceAddress: string}) => {
+      async (info: {deviceName: string; deviceAddress: string}) => {
         console.log('Đã kết nối:', info);
         setConnectedDevices(prev => {
           const exists = prev.find(d => d.address === info.deviceAddress);
@@ -192,10 +535,22 @@ const ListMessageScreen = () => {
             {name: info.deviceName, address: info.deviceAddress},
           ];
         });
-        navigate('ChatStack', {
-          screen: 'Message',
-          params: {name: info.deviceName},
-        });
+
+        // Gửi thông tin user qua Bluetooth ngay sau khi kết nối (dưới dạng JSON)
+        if (user?.id) {
+          try {
+            const userInfoData = {
+              type: 'USER_INFO',
+              userId: user.id,
+              userName: user.name || bluetoothName,
+              userEmail: user.email || '',
+            };
+            await BluetoothModule.sendMessageToAll(JSON.stringify(userInfoData));
+            console.log('📤 Sent user info:', user.name);
+          } catch (error) {
+            console.error('❌ Error sending user info:', error);
+          }
+        }
       },
     );
 
@@ -250,6 +605,8 @@ const ListMessageScreen = () => {
     );
 
     return () => {
+      messageReceivedListener.remove();
+      imageReceivedListener.remove();
       deviceFoundListener.remove();
       discoveryFinishedListener.remove();
       connectedListener.remove();
@@ -297,6 +654,14 @@ const ListMessageScreen = () => {
 
       const enabled = await checkAndEnableBluetooth();
       if (enabled) {
+        // Lấy và lưu bluetooth name
+        try {
+          const name = await BluetoothModule.getBluetoothName();
+          setBluetoothName(name);
+        } catch (error) {
+          console.error('Error getting bluetooth name:', error);
+        }
+        
         await autoRename();
         await initializeBluetoothServer();
       }
@@ -316,18 +681,54 @@ const ListMessageScreen = () => {
     }
   }, [isEnabled, initializeBluetoothServer]);
 
-  const handleConected = (
+  const handleConected = async (
     isConnectedDevice: boolean,
     item: BluetoothDevice,
   ) => {
     console.log('isConnectedDevice', item.name);
     if (!isConnectedDevice) {
-      connectTo(item);
+      await connectTo(item);
     } else {
-      navigate('ChatStack', {
-        screen: 'Message',
-        params: {name: item.name},
-      });
+      // Lấy room info từ ref
+      const roomInfo = roomInfoRef.current[item.address];
+      
+      if (roomInfo) {
+        // Đã có room info, navigate với params đầy đủ
+        navigate('ChatStack', {
+          screen: 'Message',
+          params: {
+            roomId: roomInfo.roomId,
+            receiver: roomInfo.receiver,
+          },
+        });
+      } else {
+        // Chưa có room info, chờ 1 chút rồi thử lại
+        Alert.alert(
+          '⏳ Đang đồng bộ...',
+          'Vui lòng chờ giây lát để đồng bộ thông tin room',
+          [{
+            text: 'OK',
+            onPress: () => {
+              // Thử lại sau 2s
+              setTimeout(() => {
+                const updatedRoomInfo = roomInfoRef.current[item.address];
+                if (updatedRoomInfo) {
+                  navigate('ChatStack', {
+                    screen: 'Message',
+                    params: {
+                      name: item.name,
+                      roomId: updatedRoomInfo.roomId,
+                      receiver: updatedRoomInfo.receiver,
+                    },
+                  });
+                } else {
+                  Alert.alert('❌ Lỗi', 'Không thể đồng bộ thông tin room. Vui lòng thử lại.');
+                }
+              }, 2000);
+            }
+          }]
+        );
+      }
     }
   };
 

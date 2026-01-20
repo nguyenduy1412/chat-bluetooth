@@ -444,6 +444,13 @@ class BluetoothModule(reactContext: ReactApplicationContext) :
         return
       }
 
+      // Kiểm tra xem đã có kết nối với thiết bị này chưa
+      if (connectedDevices.containsKey(address)) {
+        Log.d(TAG, "⚠️ Already connected to: $address")
+        promise.reject("ALREADY_CONNECTED", "Đã có kết nối với thiết bị này")
+        return
+      }
+
       val device = adapter!!.getRemoteDevice(address)
       Log.d(TAG, "🔌 Attempting to connect to: ${device.name} ($address)")
       Log.d(TAG, "   Bond state: ${getBondStateString(device.bondState)}")
@@ -540,152 +547,6 @@ class BluetoothModule(reactContext: ReactApplicationContext) :
   }
 
   // ==================== GỬI/NHẬN DỮ LIỆU ====================
-
-  /** Gửi tin nhắn đến một thiết bị cụ thể */
-  @ReactMethod
-  fun sendMessage(address: String, message: String, promise: Promise) {
-    try {
-      val thread = connectedDevices[address]
-      if (thread == null) {
-        promise.reject("NOT_CONNECTED", "Chưa kết nối với thiết bị $address")
-        return
-      }
-
-      thread.write(message.toByteArray())
-      promise.resolve("Đã gửi tin nhắn đến $address")
-    } catch (e: Exception) {
-      promise.reject("ERROR", e.message)
-    }
-  }
-
-  // ==================== GỬI/NHẬN FILE BASE64 ====================
-  
-  private val CHUNK_SIZE = 4096 // 4KB per chunk
-
-  /** Gửi data Base64 đến một thiết bị */
-  @ReactMethod
-  fun sendBase64Data(address: String, base64Data: String, fileName: String, type: String, promise: Promise) {
-    try {
-      val thread = connectedDevices[address]
-      if (thread == null) {
-        promise.reject("NOT_CONNECTED", "Chưa kết nối với thiết bị $address")
-        return
-      }
-
-      if (base64Data.isEmpty()) {
-        promise.reject("EMPTY_DATA", "Dữ liệu Base64 trống")
-        return
-      }
-
-      Log.d(TAG, "📤 Sending Base64 $type: $fileName (${base64Data.length} chars) to $address")
-
-      // Tính số chunks
-      val totalChunks = (base64Data.length + CHUNK_SIZE - 1) / CHUNK_SIZE
-      
-      // 1. Gửi header: DATA_B64_START|type|fileName|dataLength|totalChunks
-      val header = "DATA_B64_START|$type|$fileName|${base64Data.length}|$totalChunks\n"
-      thread.write(header.toByteArray(Charsets.UTF_8))
-      
-      Thread.sleep(50) // Đợi header được xử lý
-      
-      // 2. Gửi từng chunk
-      for (i in 0 until totalChunks) {
-        val start = i * CHUNK_SIZE
-        val end = minOf(start + CHUNK_SIZE, base64Data.length)
-        val chunk = base64Data.substring(start, end)
-        
-        val chunkMessage = "DATA_B64_CHUNK|$i|$chunk\n"
-        thread.write(chunkMessage.toByteArray(Charsets.UTF_8))
-        
-        // Progress
-        val progress = ((i + 1) * 100 / totalChunks)
-        sendEvent("onDataSendProgress", Arguments.createMap().apply {
-          putString("deviceAddress", address)
-          putString("fileName", fileName)
-          putString("type", type)
-          putInt("progress", progress)
-          putDouble("sent", ((i + 1) * CHUNK_SIZE).toDouble())
-          putDouble("total", base64Data.length.toDouble())
-        })
-        
-        Thread.sleep(20) // Delay giữa chunks để tránh overflow
-      }
-      
-      // 3. Gửi end marker
-      val endMessage = "DATA_B64_END\n"
-      thread.write(endMessage.toByteArray(Charsets.UTF_8))
-      
-      Log.d(TAG, "✅ Base64 $type sent: $fileName")
-      promise.resolve("Đã gửi $type: $fileName")
-      
-    } catch (e: Exception) {
-      Log.e(TAG, "❌ Send Base64 data error: ${e.message}", e)
-      promise.reject("ERROR", e.message)
-    }
-  }
-
-  /** Gửi data Base64 đến tất cả thiết bị */
-  @ReactMethod
-  fun sendBase64DataToAll(base64Data: String, fileName: String, type: String, promise: Promise) {
-    try {
-      if (connectedDevices.isEmpty()) {
-        promise.reject("NOT_CONNECTED", "Không có thiết bị nào được kết nối")
-        return
-      }
-
-      if (base64Data.isEmpty()) {
-        promise.reject("EMPTY_DATA", "Dữ liệu Base64 trống")
-        return
-      }
-
-      Log.d(TAG, "📤 Sending Base64 $type to all: $fileName (${base64Data.length} chars)")
-
-      // Tính số chunks một lần
-      val totalChunks = (base64Data.length + CHUNK_SIZE - 1) / CHUNK_SIZE
-      var successCount = 0
-      
-      for ((address, thread) in connectedDevices) {
-        try {
-          // Header
-          val header = "DATA_B64_START|$type|$fileName|${base64Data.length}|$totalChunks\n"
-          thread.write(header.toByteArray(Charsets.UTF_8))
-          Thread.sleep(50)
-          
-          // Chunks
-          for (i in 0 until totalChunks) {
-            val start = i * CHUNK_SIZE
-            val end = minOf(start + CHUNK_SIZE, base64Data.length)
-            val chunk = base64Data.substring(start, end)
-            
-            val chunkMessage = "DATA_B64_CHUNK|$i|$chunk\n"
-            thread.write(chunkMessage.toByteArray(Charsets.UTF_8))
-            
-            val progress = ((i + 1) * 100 / totalChunks)
-            sendEvent("onDataSendProgress", Arguments.createMap().apply {
-              putString("deviceAddress", address)
-              putString("fileName", fileName)
-              putString("type", type)
-              putInt("progress", progress)
-            })
-            
-            Thread.sleep(20)
-          }
-          
-          // End
-          thread.write("DATA_B64_END\n".toByteArray(Charsets.UTF_8))
-          successCount++
-          
-        } catch (e: Exception) {
-          Log.e(TAG, "Failed to send to $address: ${e.message}")
-        }
-      }
-      
-      promise.resolve("Đã gửi $type đến $successCount/${connectedDevices.size} thiết bị")
-      
-    } catch (e: Exception) {
-      promise.reject("ERROR", e.message)
-    }
-  }
 
   /** Gửi tin nhắn đến tất cả thiết bị đã kết nối */
   @ReactMethod
