@@ -469,63 +469,63 @@ const ListMessageScreen = () => {
       initializeBluetoothServer();
     }
   }, [isEnabled, initializeBluetoothServer]);
-  const handleConected = async (
-    isConnectedDevice: boolean,
-    item: BluetoothDevice,
-  ) => {
-    console.log('isConnectedDevice', item.name);
-    console.log('isConnectedDevice', item.name);
-    if (!isConnectedDevice) {
-      await connectTo(item);
-    } else {
-      // Lấy room info từ ref
-      const roomInfo = roomInfoRef.current[item.address];
-      console.log('roomInfo', roomInfo);
-      if (roomInfo) {
-        // Đã có room info, navigate với params đầy đủ
-        // navigate('ChatStack', {
-        //   screen: 'Message',
-        //   params: {
-        //     roomId: roomInfo.roomId,
-        //     receiver: roomInfo.receiver,
-        //   },
-        // });
+
+  const handleConnected = useCallback(
+    async (isConnectedDevice: boolean, item: BluetoothDevice) => {
+      console.log('isConnectedDevice', item.name);
+      if (!isConnectedDevice) {
+        await connectTo(item);
       } else {
-        // Chưa có room info, chờ 1 chút rồi thử lại
-        Alert.alert(
-          '⏳ Đang đồng bộ...',
-          'Vui lòng chờ giây lát để đồng bộ thông tin room',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Thử lại sau 2s
-                setTimeout(() => {
-                  const updatedRoomInfo = roomInfoRef.current[item.address];
-                  if (updatedRoomInfo) {
-                    console.log('updatedRoomInfo', updatedRoomInfo);
-                    // navigate('ChatStack', {
-                    //   screen: 'Message',
-                    //   params: {
-                    //     name: item.name,
-                    //     roomId: updatedRoomInfo.roomId,
-                    //     receiver: updatedRoomInfo.receiver,
-                    //   },
-                    // });
-                  } else {
-                    Alert.alert(
-                      '❌ Lỗi',
-                      'Không thể đồng bộ thông tin room. Vui lòng thử lại.',
-                    );
-                  }
-                }, 2000);
-              },
+        // Lấy room info từ ref
+        const roomInfo = roomInfoRef.current[item.address];
+        console.log('roomInfo', roomInfo);
+        if (roomInfo) {
+          // Đã có room info, navigate với params đầy đủ
+          navigate('ChatStack', {
+            screen: 'Message',
+            params: {
+              roomId: roomInfo.roomId,
+              receiver: roomInfo.receiver,
             },
-          ],
-        );
+          });
+        } else {
+          // Chưa có room info, chờ 1 chút rồi thử lại
+          Alert.alert(
+            '⏳ Đang đồng bộ...',
+            'Vui lòng chờ giây lát để đồng bộ thông tin room',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Thử lại sau 2s
+                  setTimeout(() => {
+                    const updatedRoomInfo = roomInfoRef.current[item.address];
+                    if (updatedRoomInfo) {
+                      console.log('updatedRoomInfo', updatedRoomInfo);
+                      navigate('ChatStack', {
+                        screen: 'Message',
+                        params: {
+                          name: item.name,
+                          roomId: updatedRoomInfo.roomId,
+                          receiver: updatedRoomInfo.receiver,
+                        },
+                      });
+                    } else {
+                      Alert.alert(
+                        '❌ Lỗi',
+                        'Không thể đồng bộ thông tin room. Vui lòng thử lại.',
+                      );
+                    }
+                  }, 2000);
+                },
+              },
+            ],
+          );
+        }
       }
-    }
-  };
+    },
+    [connectTo],
+  );
 
   const renderDevice = useCallback(
     ({item}: {item: BluetoothDevice}) => {
@@ -537,13 +537,13 @@ const ListMessageScreen = () => {
         <DeviceItem
           item={item}
           isConnectedDevice={isConnectedDevice}
-          onConnected={handleConected}
+          onConnected={handleConnected}
           connectTo={connectTo}
           disconnect={disconnect}
         />
       );
     },
-    [connectedDevices, connectTo, disconnect, handleConected],
+    [connectedDevices, connectTo, disconnect, handleConnected],
   );
 
   const handleChatAI = async () => {
