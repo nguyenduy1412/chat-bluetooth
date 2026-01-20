@@ -71,7 +71,6 @@ export const CustomChatView = ({
       groups[dateKey].push(message);
     });
 
-    
     return Object.keys(groups)
       .sort((a, b) => dayjs(b).diff(dayjs(a)))
       .map(dateKey => ({
@@ -102,13 +101,16 @@ export const CustomChatView = ({
     };
   }, [insets.bottom]);
 
-  
   useEffect(() => {
     const currentLength = messages.length;
     const previousLength = previousMessageCountRef.current;
-    
-    
-    if (currentLength > previousLength && currentLength > 0) {
+
+    // Chỉ scroll khi có tin nhắn mới VÀ groupedMessages không rỗng
+    if (
+      currentLength > previousLength &&
+      currentLength > 0 &&
+      groupedMessages.length > 0
+    ) {
       setTimeout(() => {
         sectionListRef.current?.scrollToLocation({
           sectionIndex: 0,
@@ -117,21 +119,22 @@ export const CustomChatView = ({
         });
       }, 100);
     }
-    
-    
-    previousMessageCountRef.current = currentLength;
-  }, [messages.length]);
 
-  
+    previousMessageCountRef.current = currentLength;
+  }, [messages.length, groupedMessages.length]);
+
   useEffect(() => {
     if (scrollToMessageId && groupedMessages.length > 0) {
-      
       let foundSectionIndex = -1;
       let foundItemIndex = -1;
 
-      for (let sectionIndex = 0; sectionIndex < groupedMessages.length; sectionIndex++) {
+      for (
+        let sectionIndex = 0;
+        sectionIndex < groupedMessages.length;
+        sectionIndex++
+      ) {
         const itemIndex = groupedMessages[sectionIndex].data.findIndex(
-          msg => msg.id === scrollToMessageId
+          msg => msg.id === scrollToMessageId,
         );
         if (itemIndex !== -1) {
           foundSectionIndex = sectionIndex;
@@ -146,7 +149,7 @@ export const CustomChatView = ({
             sectionIndex: foundSectionIndex,
             itemIndex: foundItemIndex,
             animated: true,
-            viewPosition: 0.5, 
+            viewPosition: 0.5,
           });
         }, 100);
       }
@@ -251,34 +254,34 @@ export const CustomChatView = ({
               minH={40}
               maxH={100}
               justifyContent="center">
-            <TextInput
-              style={styles.textInput}
-              value={inputText}
-              onChangeText={setInputText}
-              placeholder={placeholder}
-              placeholderTextColor="#999"
-              multiline
-              maxLength={1000}
-              returnKeyType="default"
-            />
+              <TextInput
+                style={styles.textInput}
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder={placeholder}
+                placeholderTextColor="#999"
+                multiline
+                maxLength={1000}
+                returnKeyType="default"
+              />
+            </Box>
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                inputText.trim().length === 0 && styles.sendButtonDisabled,
+              ]}
+              onPress={handleSend}
+              disabled={inputText.trim().length === 0}
+              activeOpacity={0.7}>
+              <LottieBox
+                loop={true}
+                source={SEND_ICON}
+                ref={animation}
+                style={styles.icon}
+                autoPlay
+              />
+            </TouchableOpacity>
           </Box>
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              inputText.trim().length === 0 && styles.sendButtonDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={inputText.trim().length === 0}
-            activeOpacity={0.7}>
-            <LottieBox
-              loop={true}
-              source={SEND_ICON}
-              ref={animation}
-              style={styles.icon}
-              autoPlay
-            />
-          </TouchableOpacity>
-        </Box>
         )}
       </Box>
       <ImageModal
