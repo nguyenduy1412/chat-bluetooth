@@ -78,3 +78,4 @@ yarn-error.log
 .expo
 dist/
 web-build/
+config.bat
