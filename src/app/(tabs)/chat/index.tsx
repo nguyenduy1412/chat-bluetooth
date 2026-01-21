@@ -313,35 +313,18 @@ const ListMessageScreen = () => {
   }, []);
 
   const handleRoomPress = useCallback((roomResponse: RoomResponse) => {
-    navigate('ChatStack', {
-      screen: 'Message',
-      params: {
-        roomId: roomResponse.id,
-        receiver: roomResponse.receiver,
-      },
+    navigate('MessageScreen', {
+      roomId: roomResponse.id,
+      receiver: roomResponse.receiver,
     });
   }, []);
-
-  const handleNavigateToChat = useCallback((roomInfo: RoomInfo) => {
-    navigate('ChatStack', {
-      screen: 'Message',
-      params: {
-        roomId: roomInfo.roomId,
-        receiver: roomInfo.receiver,
-      },
-    });
-  }, []);
-
   const handleChatAI = useCallback(async () => {
     const ai = await getUserByAttributes({system: true});
     if (!user?.id || !ai?.id) return;
     const room = await getRoomByMember(user?.id, ai?.id);
-    navigate('ChatStack', {
-      screen: 'ChatAIScreen',
-      params: {
-        roomId: room.id,
-        receiver: ai,
-      },
+    navigate('ChatAIScreen', {
+      roomId: room.id,
+      receiver: ai,
     });
   }, []);
 

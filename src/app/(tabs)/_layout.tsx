@@ -13,6 +13,7 @@ import {
   UPLOAD_ICON,
 } from '../../assets/animation';
 import ListMessageScreen from './chat';
+import ChatStack from './chat/_layout';
 import SettingsScreen from './settings';
 import MapScreen from './map';
 import useModelStore from '../../store/modelStore';
@@ -61,9 +62,19 @@ export default function TabStack() {
 
       console.log('👤 Received USER_INFO from:', sender.name, senderAddress);
 
-      // Create/Update sender in DB
-      sender.deviceAddress = senderAddress;
-      await createUser(sender);
+      // Create/Update sender in DB - Sanitize data to avoid SQLite errors
+      const cleanSender: Partial<User> = {
+        id: sender.id,
+        name: sender.name,
+        image: sender.image || '',
+        deviceAddress: senderAddress,
+        idDevice: sender.idDevice,
+      };
+
+      if (sender.email) cleanSender.email = sender.email;
+      if (sender.birthday) cleanSender.birthday = sender.birthday;
+
+      await createUser(cleanSender as User);
 
       // Get/Create deterministic room
       const room = await getRoomByMember(currentUser.id, sender.id);
@@ -117,7 +128,17 @@ export default function TabStack() {
         },
       };
 
-      await createUser(receiver);
+      // Sanitize receiver before creating/updating
+      const cleanReceiver: Partial<User> = {
+        id: receiver.id,
+        name: receiver.name,
+        image: receiver.image || '',
+        deviceAddress: receiver.deviceAddress,
+        idDevice: receiver.idDevice,
+      };
+      if (receiver.email) cleanReceiver.email = receiver.email;
+
+      await createUser(cleanReceiver as User);
       handleNavigateToChat(roomInfoRef.current[receiverAddress]);
     } catch (error) {
       console.error('❌ Error handling room info:', error);
@@ -305,7 +326,7 @@ export default function TabStack() {
           ),
           headerShown: false,
         }}
-        component={ListMessageScreen}
+        component={ChatStack}
       />
       <Tab.Screen
         name="Settings"
