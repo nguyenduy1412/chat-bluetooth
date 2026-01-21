@@ -37,6 +37,16 @@ const DeviceItem = ({
           </Text>
           <Text fontSize={12} color="#999">
             {item.address}
+            {item.bondState === 'BONDED' && !isConnectedDevice && (
+              <Text
+                fontSize={12}
+                color={item.isOnline ? 'green' : '#666'}
+                style={{fontStyle: 'italic'}}>
+                {item.isOnline
+                  ? ' • Đã ghép đôi (Online)'
+                  : ' • Đã ghép đôi (Offline)'}
+              </Text>
+            )}
           </Text>
         </Box>
         <Box

@@ -317,9 +317,17 @@ const ListMessageScreen = () => {
           return;
         }
         setDevices(prev => {
-          const exists = prev.find(d => d.address === device.address);
-          if (exists) return prev;
-          return [...prev, device];
+          const index = prev.findIndex(d => d.address === device.address);
+
+          if (index !== -1) {
+            // Update exist device (mark Online)
+            const newDevices = [...prev];
+            newDevices[index] = {...newDevices[index], isOnline: true};
+            return newDevices;
+          }
+
+          // Add new device (Online)
+          return [...prev, {...device, isOnline: true}];
         });
       },
     );

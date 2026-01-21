@@ -14,6 +14,7 @@ export interface BluetoothDevice {
   name: string;
   address: string;
   bondState: 'BONDED' | 'BONDING' | 'NONE' | 'UNKNOWN';
+  isOnline?: boolean;
 }
 
 export interface ConnectedDevice {

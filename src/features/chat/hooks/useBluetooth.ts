@@ -49,6 +49,17 @@ export const useBluetooth = () => {
 
       setDiscovering(true);
       setDevices([]);
+
+      // Get paired devices first (OFFLINE initially)
+      const pairedDevices = await BluetoothModule.getPairedDevices();
+      console.log('🔗 Đã lấy danh sách đã ghép đôi:', pairedDevices.length);
+
+      const validPairedDevices = pairedDevices
+        .filter(d => d.name && d.name.startsWith('BLE'))
+        .map(d => ({...d, isOnline: false})); // Mark as offline initially
+
+      setDevices(validPairedDevices);
+
       await BluetoothModule.startDiscovery();
       console.log('🔍 Bắt đầu quét thiết bị');
     } catch (error: any) {
@@ -74,6 +85,11 @@ export const useBluetooth = () => {
       }
 
       console.log('🔌 Đang kết nối đến:', device.name);
+
+      // Stop discovery before connecting to ensure stability
+      await BluetoothModule.stopDiscovery();
+      setDiscovering(false);
+
       await BluetoothModule.connectToDevice(device.address);
     } catch (error: any) {
       console.error('Connect error:', error);
@@ -99,7 +115,8 @@ export const useBluetooth = () => {
 
   const initializeBluetoothServer = useCallback(async () => {
     try {
-      if (!isEnabled) return;
+      const enabled = await BluetoothModule.isBluetoothEnabled();
+      if (!enabled) return;
 
       // Bật discoverable
       await BluetoothModule.makeDiscoverable(3000);

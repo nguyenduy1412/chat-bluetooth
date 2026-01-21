@@ -1,11 +1,16 @@
-import { EmitterSubscription, NativeEventEmitter, NativeModules } from 'react-native';
+import {
+  EmitterSubscription,
+  NativeEventEmitter,
+  NativeModules,
+} from 'react-native';
 
-const { BluetoothModule } = NativeModules;
+const {BluetoothModule} = NativeModules;
 
 export interface BluetoothDevice {
   name: string;
   address: string;
   bondState: 'BONDED' | 'BONDING' | 'NONE' | 'UNKNOWN';
+  isOnline?: boolean;
 }
 
 export interface ConnectionInfo {
@@ -87,13 +92,13 @@ export interface BluetoothEvents {
   onConnectionLost: (info: DisconnectInfo) => void;
   onConnectionFailed: (error: ConnectionFailedInfo) => void;
   onMessageReceived: (data: MessageData) => void;
-  
+
   // Base64 Data Transfer Events
   onDataSendProgress: (data: DataTransferProgress) => void;
   onDataReceiveStart: (data: DataReceiveStart) => void;
   onDataReceiveProgress: (data: DataTransferProgress) => void;
   onDataReceived: (data: DataReceived) => void;
-  
+
   // Specific Type Events
   onImageReceived: (data: ImageReceived) => void;
   onAudioReceived: (data: AudioReceived) => void;
@@ -171,7 +176,11 @@ class BluetoothModuleWrapper {
    * Lấy trạng thái scan mode hiện tại
    * @returns Object chứa mode, deviceName, deviceAddress
    */
-  async getScanMode(): Promise<{mode: string; deviceName: string; deviceAddress: string}> {
+  async getScanMode(): Promise<{
+    mode: string;
+    deviceName: string;
+    deviceAddress: string;
+  }> {
     return BluetoothModule.getScanMode();
   }
 
@@ -279,7 +288,12 @@ class BluetoothModuleWrapper {
    * @param fileName - Tên file hoặc tên dữ liệu
    * @param type - Loại dữ liệu ('image', 'audio', 'file', v.v.)
    */
-  async sendBase64Data(address: string, base64Data: string, fileName: string, type: string): Promise<string> {
+  async sendBase64Data(
+    address: string,
+    base64Data: string,
+    fileName: string,
+    type: string,
+  ): Promise<string> {
     return BluetoothModule.sendBase64Data(address, base64Data, fileName, type);
   }
 
@@ -289,7 +303,11 @@ class BluetoothModuleWrapper {
    * @param fileName - Tên file hoặc tên dữ liệu
    * @param type - Loại dữ liệu ('image', 'audio', 'file', v.v.)
    */
-  async sendBase64DataToAll(base64Data: string, fileName: string, type: string): Promise<string> {
+  async sendBase64DataToAll(
+    base64Data: string,
+    fileName: string,
+    type: string,
+  ): Promise<string> {
     return BluetoothModule.sendBase64DataToAll(base64Data, fileName, type);
   }
 
@@ -301,7 +319,11 @@ class BluetoothModuleWrapper {
    * @param base64Image - Ảnh đã được encode Base64
    * @param fileName - Tên file ảnh
    */
-  async sendImage(address: string, base64Image: string, fileName: string): Promise<string> {
+  async sendImage(
+    address: string,
+    base64Image: string,
+    fileName: string,
+  ): Promise<string> {
     return this.sendBase64Data(address, base64Image, fileName, 'image');
   }
 
@@ -320,7 +342,11 @@ class BluetoothModuleWrapper {
    * @param base64Audio - Audio đã được encode Base64
    * @param fileName - Tên file audio
    */
-  async sendAudio(address: string, base64Audio: string, fileName: string): Promise<string> {
+  async sendAudio(
+    address: string,
+    base64Audio: string,
+    fileName: string,
+  ): Promise<string> {
     return this.sendBase64Data(address, base64Audio, fileName, 'audio');
   }
 
@@ -339,7 +365,11 @@ class BluetoothModuleWrapper {
    * @param base64File - File đã được encode Base64
    * @param fileName - Tên file
    */
-  async sendFile(address: string, base64File: string, fileName: string): Promise<string> {
+  async sendFile(
+    address: string,
+    base64File: string,
+    fileName: string,
+  ): Promise<string> {
     return this.sendBase64Data(address, base64File, fileName, 'file');
   }
 
@@ -359,7 +389,7 @@ class BluetoothModuleWrapper {
    */
   addEventListener<K extends keyof BluetoothEvents>(
     eventName: K,
-    callback: BluetoothEvents[K]
+    callback: BluetoothEvents[K],
   ): EmitterSubscription {
     const subscription = this.eventEmitter.addListener(eventName, callback);
     this.listeners.set(eventName, subscription);
