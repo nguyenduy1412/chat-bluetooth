@@ -51,11 +51,6 @@ const ListMessageScreen = () => {
   const [searchText, setSearchText] = useState('');
   const [isBluetoothOn, setIsBluetoothOn] = useState(false);
 
-  // Lưu room info cho mỗi device (key là deviceAddress)
-  const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
-  const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
-
-  const {mutateAsync: createUser} = useCreateUser();
   const {mutateAsync: createMessage} = useCreateMessage();
 
   // Fetch rooms with receiver info using hook
@@ -173,151 +168,6 @@ const ListMessageScreen = () => {
     }
   }, [isBluetoothOn, refetchRooms, startDiscovery]);
 
-  // ==================== XỬ LÝ TIN NHẮN & EVENTS ====================
-
-  const handleUserInfo = async (sender: User, senderAddress: string) => {
-    try {
-      if (!user?.id || !sender?.id) return;
-
-      await updateDeviceAddress(sender?.deviceAddress || '');
-      const room = await getRoomByMember(user.id, sender.id);
-
-      sender.deviceAddress = senderAddress;
-      await createUser(sender);
-
-      roomInfoRef.current[senderAddress] = {
-        roomId: room.id,
-        receiver: sender,
-      };
-
-      const myAddress = user.deviceAddress || '';
-      const roomInfoData = {
-        type: 'ROOM_INFO',
-        room,
-        user: {
-          id: user.id,
-          name: user.name,
-          image: user?.image || '',
-          deviceAddress: myAddress,
-        },
-      };
-
-      await BluetoothModule.sendMessageToAll(JSON.stringify(roomInfoData));
-      handleNavigateToChat(roomInfoRef.current[senderAddress]);
-    } catch (error) {
-      console.error('❌ Error handling user info:', error);
-    }
-  };
-
-  const handleRoomInfo = async (
-    room: Room,
-    receiver: User,
-    receiverAddress: string,
-  ) => {
-    try {
-      if (!room || !receiver) return;
-
-      await createRoom(room);
-
-      roomInfoRef.current[receiverAddress] = {
-        roomId: room.id,
-        receiver: {
-          id: receiver.id,
-          name: receiver.name,
-          email: receiver.email,
-          deviceAddress: receiver.deviceAddress,
-        },
-      };
-
-      await createUser(receiver);
-      handleNavigateToChat(roomInfoRef.current[receiverAddress]);
-    } catch (error) {
-      console.error('❌ Error handling room info:', error);
-    }
-  };
-
-  const handleMessageReceived = async (data: any) => {
-    const {message, deviceAddress} = data;
-    try {
-      const jsonData = JSON.parse(message);
-
-      if (jsonData.type === 'USER_INFO') {
-        await handleUserInfo(jsonData.user, deviceAddress);
-        return;
-      }
-
-      if (jsonData.type === 'ROOM_INFO') {
-        await handleRoomInfo(jsonData.room, jsonData.user, deviceAddress);
-        return;
-      }
-
-      if (jsonData.id && jsonData.roomId) {
-        if (jsonData.type === 'text') {
-          await createMessage(jsonData);
-        } else if (jsonData.type === 'image') {
-          await handleImageChunk(jsonData, deviceAddress);
-        }
-        return;
-      }
-    } catch (e) {
-      console.error('❌ Error parsing message:', e);
-    }
-  };
-
-  const handleImageChunk = async (
-    messageEntity: any,
-    deviceAddress: string,
-  ) => {
-    const {
-      id: messageId,
-      message: chunk,
-      width,
-      height,
-      roomId,
-      created_by,
-      createdAt,
-    } = messageEntity;
-
-    if (!imageChunksRef.current[messageId]) {
-      imageChunksRef.current[messageId] = {
-        chunks: [],
-        totalChunks: 10,
-        receivedChunks: 0,
-        timestamp: new Date(createdAt).getTime(),
-        senderName: '',
-        deviceAddress,
-        width,
-        height,
-        roomId,
-        created_by,
-      };
-    }
-
-    const imageData = imageChunksRef.current[messageId];
-    imageData.chunks.push(chunk);
-    imageData.receivedChunks++;
-
-    if (imageData.receivedChunks >= imageData.totalChunks) {
-      const base64Image = imageData.chunks.join('');
-      try {
-        await createMessage({
-          id: messageId,
-          message: base64Image,
-          createdAt: new Date(imageData.timestamp),
-          type: 'image',
-          width: imageData.width || 0,
-          height: imageData.height || 0,
-          roomId: imageData.roomId,
-          created_by: imageData.created_by,
-          status: 'delivered',
-        });
-      } catch (error) {
-        console.error('❌ Error saving image to DB:', error);
-      }
-      delete imageChunksRef.current[messageId];
-    }
-  };
-
   useEffect(() => {
     const deviceFoundListener = BluetoothModule.addEventListener(
       'onDeviceFound',
@@ -350,11 +200,6 @@ const ListMessageScreen = () => {
       () => {
         setDiscovering(false);
       },
-    );
-
-    const messageReceivedListener = BluetoothModule.addEventListener(
-      'onMessageReceived',
-      async (data: any) => await handleMessageReceived(data),
     );
 
     const connectedListener = BluetoothModule.addEventListener(
@@ -458,7 +303,6 @@ const ListMessageScreen = () => {
     );
 
     return () => {
-      messageReceivedListener.remove();
       deviceFoundListener.remove();
       discoveryFinishedListener.remove();
       connectedListener.remove();

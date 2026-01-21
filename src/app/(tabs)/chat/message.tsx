@@ -59,30 +59,32 @@ const MessageScreen = () => {
   );
 
   useEffect(() => {
-    setupBluetoothListeners();
+    const connectedListener = BluetoothModule.addEventListener(
+      'onConnected',
+      info => {
+        const device: BluetoothDevice = {
+          name: info.deviceName,
+          address: info.deviceAddress,
+          paired: true,
+        };
+        setConnectedDevices(prev => [...prev, device]);
+      },
+    );
+
+    const disconnectedListener = BluetoothModule.addEventListener(
+      'onDisconnected',
+      info => {
+        setConnectedDevices(prev =>
+          prev.filter(d => d.address !== info.deviceAddress),
+        );
+      },
+    );
 
     return () => {
-      BluetoothModule.removeAllListeners();
+      connectedListener.remove();
+      disconnectedListener.remove();
     };
   }, []);
-
-  const setupBluetoothListeners = () => {
-    // Chỉ lắng nghe kết nối/ngắt kết nối
-    BluetoothModule.addEventListener('onConnected', info => {
-      const device: BluetoothDevice = {
-        name: info.deviceName,
-        address: info.deviceAddress,
-        paired: true,
-      };
-      setConnectedDevices(prev => [...prev, device]);
-    });
-
-    BluetoothModule.addEventListener('onDisconnected', info => {
-      setConnectedDevices(prev =>
-        prev.filter(d => d.address !== info.deviceAddress),
-      );
-    });
-  };
 
   const handleSendMessage = async (text: string) => {
     console.log('Sending message:', text, connectedDevices);
