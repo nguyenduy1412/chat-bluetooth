@@ -1,5 +1,8 @@
 export const formatName = (name?: string) => {
   if (!name) return 'Ẩn danh';
+  if (name.startsWith('BLE ')) {
+    return name.slice(4);
+  }
   if (name.startsWith('BLE')) {
     return name.slice(3);
   }

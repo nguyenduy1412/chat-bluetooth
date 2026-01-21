@@ -3,9 +3,8 @@ import {User} from '@/database/entities/User';
 
 export interface RoomResponse {
   id: string;
-  name?: string;
+  receiver: User;
   type?: string;
-  image?: string;
   lastMessage?: MessageEntity | null;
   createdAt?: Date;
   updatedAt?: Date;

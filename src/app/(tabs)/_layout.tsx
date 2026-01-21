@@ -36,7 +36,7 @@ export default function TabStack() {
 
         loadModels();
         await ensureDatabase();
-        console.log('✅ Database ready', user);
+        console.log('✅ Database ready');
         const listUser= await getAllUser();
         const messageRepo = new MessageRepository();
         const allMessages = await messageRepo.findAll();

@@ -1,15 +1,18 @@
 import {User} from '@/database/entities/User';
 import {UserRepository} from '@/database/repositories/UserRepository';
 
-export const getUserByAttributes = async (object:any): Promise<User | null> => {
+export const getUserByAttributes = async (
+  object: any,
+): Promise<User | null> => {
   const userRepo = new UserRepository();
   if (!object) {
     return null;
   }
-  if(object?.system === true){
+  if (object?.system === true) {
     const res = await userRepo.findByAttributes({system: true});
-    if(!res){
+    if (!res) {
       const aiUser = await userRepo.create({
+        id: 'AI_ASSISTANT',
         name: 'AI',
         system: true,
       });

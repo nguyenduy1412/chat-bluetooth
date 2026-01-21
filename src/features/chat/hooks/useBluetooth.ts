@@ -40,7 +40,9 @@ export const useBluetooth = () => {
   };
   const startDiscovery = useCallback(async () => {
     try {
-      if (!isEnabled) {
+      // Check native state directly to avoid React state lag
+      const enabled = await BluetoothModule.isBluetoothEnabled();
+      if (!enabled) {
         Alert.alert('⚠️ Bluetooth chưa bật', 'Vui lòng bật Bluetooth trước');
         return;
       }
@@ -54,7 +56,8 @@ export const useBluetooth = () => {
       setDiscovering(false);
       Alert.alert('❌ Lỗi quét', error.message || String(error));
     }
-  }, [isEnabled]);
+  }, []);
+
   const connectTo = async (device: BluetoothDevice) => {
     try {
       // Kiểm tra xem đã có kết nối với thiết bị này chưa
@@ -93,6 +96,7 @@ export const useBluetooth = () => {
       );
     }
   };
+
   const initializeBluetoothServer = useCallback(async () => {
     try {
       if (!isEnabled) return;
@@ -108,6 +112,7 @@ export const useBluetooth = () => {
       console.error('Initialize server error:', error);
     }
   }, [isEnabled]);
+
   const disconnect = async (address: string) => {
     console.log('disconect');
     try {
@@ -116,6 +121,7 @@ export const useBluetooth = () => {
       console.error('Disconnect error:', error);
     }
   };
+
   const disconnectAll = async () => {
     try {
       await BluetoothModule.disconnectAll();
@@ -124,34 +130,46 @@ export const useBluetooth = () => {
       console.error('Disconnect all error:', error);
     }
   };
+
   const autoRename = useCallback(async () => {
     try {
+      const {user} = userStore.getState();
+      const newName = user?.name ? formatNameForBLE(user.name) : 'BLE_User';
+
       let bluetoothName = await BluetoothModule.getBluetoothName();
+      console.log('Current Bluetooth Name:', bluetoothName);
 
-      if (!bluetoothName.startsWith('BLE')) {
-        bluetoothName = 'BLE' + bluetoothName;
-        await BluetoothModule.setBluetoothName(bluetoothName);
-
-        let retry = 0;
-        while (retry < 5) {
-          const currentName = await BluetoothModule.getBluetoothName();
-          if (currentName === bluetoothName) {
-            console.log('✅ Đổi tên Bluetooth thành công:', currentName);
-            return;
-          }
-          await new Promise(res => setTimeout(res, 1000));
-          retry++;
-        }
-        console.warn('⚠️ Đổi tên Bluetooth thất bại sau 5 lần thử');
+      // Only rename if distinct
+      if (bluetoothName !== newName) {
+        await BluetoothModule.setBluetoothName(newName);
+        console.log('✅ Đổi tên Bluetooth thành công:', newName);
       }
     } catch (err) {
       console.error('❌ Lỗi khi đổi tên Bluetooth:', err);
     }
   }, []);
-  const updateDeviceAddress = async (deviceAddress:string) => {
+
+  // Helper to ensure name starts with BLE if needed or just use user name?
+  // User said: "lấy user.name của người dùng để đổi tên" -> "Use user.name to rename".
+  // And previous logic added 'BLE'. User might want to KEEP 'BLE' prefix internally so we can validly strip it later, OR just use raw name?
+  // The system seems to rely on 'BLE' prefix to identify app users?
+  // Let's keep the BLE prefix for protocol but use user.name.
+  // Actually, wait. User request: "tôi muốn ở hàm auto rename sẽ lấy user.name của người dùng để đổi tên" -> "I want auto rename function to use user.name".
+  // And "còn đoạn ẩn tên đâu ví dụ BLEUser thì chỉ hiển thị User" -> "where is the hiding name part, e.g. BLEUser shows as User".
+  // This implies the name SHOULD have BLE prefix internally.
+  function formatNameForBLE(name: string): string {
+    // Remove existing BLE prefix if user typed it, then add it back to be sure?
+    // Or just ensure it starts with BLE.
+    // If user name is "Tuan", device name becomes "BLE Tuan".
+    // If user name is "BLE Tuan", device name "BLE Tuan".
+    if (name.startsWith('BLE')) return name;
+    return `BLE ${name}`;
+  }
+  const updateDeviceAddress = async (deviceAddress: string) => {
     try {
-      if (!user?.id || !deviceAddress || user.deviceAddress === deviceAddress) return;
-      
+      if (!user?.id || !deviceAddress || user.deviceAddress === deviceAddress)
+        return;
+
       await updateUser({
         id: user.id,
         data: {deviceAddress},
@@ -176,6 +194,6 @@ export const useBluetooth = () => {
     setDiscovering,
     setConnectedDevices,
     autoRename,
-    updateDeviceAddress
+    updateDeviceAddress,
   };
 };

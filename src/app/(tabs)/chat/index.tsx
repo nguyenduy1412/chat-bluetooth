@@ -1,10 +1,12 @@
-import {useEffect, useCallback, useRef} from 'react';
+import {useEffect, useCallback, useRef, useState, useMemo} from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  TouchableOpacity,
   RefreshControl,
+  Switch,
+  TouchableOpacity,
+  Platform,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import BluetoothModule from '../../../assets/managers/BluetoothModule';
@@ -20,8 +22,11 @@ import type {
   BluetoothDevice,
   ImageChunk,
   RoomInfo,
+  RoomResponse,
 } from '@/features/chat/types';
 import DeviceItem from '@/features/chat/components/DeviceItem';
+import {RoomItem} from '@/features/chat/components/RoomItem';
+import {HeaderSearch} from '@/features/chat/components/HeaderSearch';
 import {useBluetooth} from '@/features/chat/hooks/useBluetooth';
 import {User} from '@/database/entities/User';
 import {Room} from '@/database/entities/Room';
@@ -29,28 +34,42 @@ import {useCreateUser} from '@/features/auth/hooks/useCreateUser';
 import {RoomRepository} from '@/database/repositories/RoomRepository';
 import {UserRepository} from '@/database/repositories/UserRepository';
 import {createRoom} from '@/features/chat/api/createRoom';
-import { useCreateMessage } from '@/features/chat/hooks/useCreateMessage';
+import {useCreateMessage} from '@/features/chat/hooks/useCreateMessage';
+import {useGetRoomsByUserId} from '@/features/chat/hooks/useGetRoomsByUserId';
+import {useQueryClient} from '@tanstack/react-query';
+import {formatName} from '@/features/chat/utils/formatName';
 
 const roomRepo = new RoomRepository();
 const userRepo = new UserRepository();
+
 const ListMessageScreen = () => {
   const {top, bottom} = useSafeAreaInsets();
+  const {user} = userStore();
+  const queryClient = useQueryClient();
 
-  const {user, setUser} = userStore();
+  // State
+  const [searchText, setSearchText] = useState('');
+  const [isBluetoothOn, setIsBluetoothOn] = useState(false);
 
   // Lưu room info cho mỗi device (key là deviceAddress)
   const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
-
   const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
 
-  const {mutateAsync: createUser, isPending} = useCreateUser();
+  const {mutateAsync: createUser} = useCreateUser();
   const {mutateAsync: createMessage} = useCreateMessage();
-  const fetchAll = async () => {
-    const rooms = await roomRepo.findAll();
-    console.log('rooms', rooms);
-    const users = await userRepo.findAll();
-    console.log('users', users);
-  };
+
+  // Fetch rooms with receiver info using hook
+  const {
+    data: rooms = [],
+    isLoading: isLoadingRooms,
+    refetch: refetchRooms,
+  } = useGetRoomsByUserId({
+    id: user?.id || '',
+    queryConfig: {
+      enabled: !!user?.id,
+    },
+  });
+
   const {
     checkAndEnableBluetooth,
     startDiscovery,
@@ -69,37 +88,96 @@ const ListMessageScreen = () => {
     updateDeviceAddress,
   } = useBluetooth();
 
-  // ==================== XỬ LÝ TIN NHẮN ====================
+  // Filter logic
+  const filteredRooms = useMemo(() => {
+    if (!searchText) return rooms;
+    return rooms.filter(room =>
+      room.receiver.name?.toLowerCase().includes(searchText.toLowerCase()),
+    );
+  }, [rooms, searchText]);
+
+  const filteredDevices = useMemo(() => {
+    if (!searchText) return devices;
+    return devices.filter(
+      device =>
+        device.name?.toLowerCase().includes(searchText.toLowerCase()) ||
+        device.address?.toLowerCase().includes(searchText.toLowerCase()),
+    );
+  }, [devices, searchText]);
+
+  // Map discovered devices by address for quick lookup
+  const onlineDevicesMap = useMemo(() => {
+    const map = new Map<string, BluetoothDevice>();
+    devices.forEach(d => map.set(d.address, d));
+    return map;
+  }, [devices]);
+
+  // Filter out devices that are already linked to a room
+  const displayDevices = useMemo(() => {
+    return filteredDevices.filter(device => {
+      // Check if this device belongs to any room's receiver
+      const isLinkedToRoom = rooms.some(
+        room => room.receiver?.deviceAddress === device.address,
+      );
+      return !isLinkedToRoom;
+    });
+  }, [filteredDevices, rooms]);
+
+  // Initial Auto Scan & Bluetooth Check
+  useEffect(() => {
+    const init = async () => {
+      const enabled = await checkAndEnableBluetooth();
+      setIsBluetoothOn(!!enabled);
+
+      if (enabled) {
+        await autoRename();
+        await initializeBluetoothServer();
+        // Tự động quét khi vào màn hình
+        startDiscovery();
+      }
+    };
+    init();
+  }, []); // Only run on mount
+
+  const handleToggleBluetooth = async (value: boolean) => {
+    setIsBluetoothOn(value);
+    if (value) {
+      const enabled = await checkAndEnableBluetooth();
+      if (enabled) {
+        await initializeBluetoothServer();
+        startDiscovery();
+      }
+    } else {
+      // Logic disable scan (module might not support explicit disable bluetooth)
+      setDiscovering(false);
+    }
+  };
+
+  const onRefresh = useCallback(() => {
+    refetchRooms();
+    if (isBluetoothOn) {
+      startDiscovery();
+    }
+  }, [isBluetoothOn, refetchRooms, startDiscovery]);
+
+  // ==================== XỬ LÝ TIN NHẮN & EVENTS ====================
 
   const handleUserInfo = async (sender: User, senderAddress: string) => {
     try {
-      console.log('👤 [RESPONDER] Received USER_INFO from:', sender.name);
-      console.log('   Sender ID:', sender.id);
-      console.log('   Sender Address:', senderAddress);
-
       if (!user?.id || !sender?.id) return;
 
-      // Cập nhật địa chỉ Bluetooth của chính mình (nếu sender gửi kèm)
       await updateDeviceAddress(sender?.deviceAddress || '');
-
-      // Tạo hoặc lấy room (chỉ bên Responder tạo)
       const room = await getRoomByMember(user.id, sender.id);
-      console.log('✅ [RESPONDER] Room created/found:', room.id);
 
-      // Lưu sender với deviceAddress đúng
       sender.deviceAddress = senderAddress;
       await createUser(sender);
 
-      // Lưu room info vào ref
       roomInfoRef.current[senderAddress] = {
         roomId: room.id,
         receiver: sender,
       };
 
-      // Lấy địa chỉ của chính mình (đã được set bởi bên kia)
       const myAddress = user.deviceAddress || '';
-
-      // Gửi ROOM_INFO với room và user info của chính mình
       const roomInfoData = {
         type: 'ROOM_INFO',
         room,
@@ -111,10 +189,7 @@ const ListMessageScreen = () => {
         },
       };
 
-      console.log('📤 [RESPONDER] Sending ROOM_INFO with room:', room.id);
-      console.log('   My Address:', myAddress);
       await BluetoothModule.sendMessageToAll(JSON.stringify(roomInfoData));
-
       handleNavigateToChat(roomInfoRef.current[senderAddress]);
     } catch (error) {
       console.error('❌ Error handling user info:', error);
@@ -127,22 +202,10 @@ const ListMessageScreen = () => {
     receiverAddress: string,
   ) => {
     try {
-      console.log('🏠 [INITIATOR] Received ROOM_INFO');
-      console.log('   Room ID:', room.id);
-      console.log('   Receiver:', receiver.name);
-      console.log('   Receiver Address:', receiverAddress);
+      if (!room || !receiver) return;
 
-      if (!room || !receiver) {
-        console.error('Invalid room or receiver data');
-        return;
-      }
-
-      // ✅ LƯU ROOM VÀO DATABASE
-      // Với deterministic ID, createRoom sẽ tìm thấy room có sẵn hoặc tạo mới
       await createRoom(room);
-      console.log('✅ Room saved to database:', room.id);
 
-      // Lưu room info vào ref
       roomInfoRef.current[receiverAddress] = {
         roomId: room.id,
         receiver: {
@@ -153,10 +216,7 @@ const ListMessageScreen = () => {
         },
       };
 
-      // Lưu receiver user vào database
       await createUser(receiver);
-
-      console.log('✅ [INITIATOR] Room info saved, navigating to chat');
       handleNavigateToChat(roomInfoRef.current[receiverAddress]);
     } catch (error) {
       console.error('❌ Error handling room info:', error);
@@ -164,34 +224,24 @@ const ListMessageScreen = () => {
   };
 
   const handleMessageReceived = async (data: any) => {
-    console.log('📩 Message received data:', data);
-    const {message, senderName, deviceAddress} = data;
-
-    console.log('📩 Received message in index:', message);
-
+    const {message, deviceAddress} = data;
     try {
       const jsonData = JSON.parse(message);
 
-      // Xử lý USER_INFO protocol
       if (jsonData.type === 'USER_INFO') {
         await handleUserInfo(jsonData.user, deviceAddress);
         return;
       }
 
-      // Xử lý ROOM_INFO protocol
       if (jsonData.type === 'ROOM_INFO') {
         await handleRoomInfo(jsonData.room, jsonData.user, deviceAddress);
         return;
       }
 
-      // Xử lý MessageEntity (text hoặc image chunk)
       if (jsonData.id && jsonData.roomId) {
         if (jsonData.type === 'text') {
-          // Tin nhắn text - lưu trực tiếp vào DB
-          console.log('📨 Text message from', jsonData.created_by);
           await createMessage(jsonData);
         } else if (jsonData.type === 'image') {
-          // Tin nhắn ảnh - ghép các chunk lại
           await handleImageChunk(jsonData, deviceAddress);
         }
         return;
@@ -215,11 +265,10 @@ const ListMessageScreen = () => {
       createdAt,
     } = messageEntity;
 
-    // Khởi tạo storage nếu chưa có
     if (!imageChunksRef.current[messageId]) {
       imageChunksRef.current[messageId] = {
         chunks: [],
-        totalChunks: 10, // Theo logic gửi
+        totalChunks: 10,
         receivedChunks: 0,
         timestamp: new Date(createdAt).getTime(),
         senderName: '',
@@ -229,31 +278,14 @@ const ListMessageScreen = () => {
         roomId,
         created_by,
       };
-      console.log(`📸 Image start: ${messageId}`);
     }
 
     const imageData = imageChunksRef.current[messageId];
     imageData.chunks.push(chunk);
     imageData.receivedChunks++;
 
-    const progress = Math.round(
-      (imageData.receivedChunks / imageData.totalChunks) * 100,
-    );
-
-    console.log(
-      `📦 Chunk ${imageData.receivedChunks}/${imageData.totalChunks} (${progress}%)`,
-    );
-
-    // Khi nhận đủ chunks, ghép lại và lưu
     if (imageData.receivedChunks >= imageData.totalChunks) {
       const base64Image = imageData.chunks.join('');
-
-      console.log(
-        `✅ Image received: ${messageId}, ${(base64Image.length / 1024).toFixed(
-          1,
-        )}KB`,
-      );
-
       try {
         await createMessage({
           id: messageId,
@@ -266,13 +298,9 @@ const ListMessageScreen = () => {
           created_by: imageData.created_by,
           status: 'delivered',
         });
-
-        console.log('✅ Image saved to DB:', messageId);
       } catch (error) {
         console.error('❌ Error saving image to DB:', error);
       }
-
-      // Xóa khỏi ref
       delete imageChunksRef.current[messageId];
     }
   };
@@ -281,7 +309,6 @@ const ListMessageScreen = () => {
     const deviceFoundListener = BluetoothModule.addEventListener(
       'onDeviceFound',
       (device: BluetoothDevice) => {
-        console.log('✅ Tìm thấy thiết bị app:', device);
         if (
           !device.name ||
           device.name.toLowerCase() === 'unknown' ||
@@ -297,26 +324,21 @@ const ListMessageScreen = () => {
       },
     );
 
-    // Listener: Quét xong
     const discoveryFinishedListener = BluetoothModule.addEventListener(
       'onDiscoveryFinished',
       () => {
-        console.log('Quét xong');
         setDiscovering(false);
       },
     );
 
-    // Listener: Tin nhắn nhận được
     const messageReceivedListener = BluetoothModule.addEventListener(
       'onMessageReceived',
       async (data: any) => await handleMessageReceived(data),
     );
 
-    // Listener: Kết nối thành công
     const connectedListener = BluetoothModule.addEventListener(
       'onConnected',
       async (info: {deviceName: string; deviceAddress: string}) => {
-        console.log('Đã kết nối:', info);
         setConnectedDevices(prev => {
           const exists = prev.find(d => d.address === info.deviceAddress);
           if (exists) return prev;
@@ -326,8 +348,6 @@ const ListMessageScreen = () => {
           ];
         });
 
-        // Gửi thông tin user qua Bluetooth ngay sau khi kết nối
-        // Cả 2 bên đều gửi USER_INFO, race condition sẽ được xử lý bởi deterministic room ID
         if (user?.id) {
           try {
             const userInfoData = {
@@ -342,7 +362,6 @@ const ListMessageScreen = () => {
             await BluetoothModule.sendMessageToAll(
               JSON.stringify(userInfoData),
             );
-            console.log('📤 Sent USER_INFO:', user.name);
           } catch (error) {
             console.error('❌ Error sending user info:', error);
           }
@@ -350,22 +369,18 @@ const ListMessageScreen = () => {
       },
     );
 
-    // Listener: Ngắt kết nối
     const disconnectedListener = BluetoothModule.addEventListener(
       'onDisconnected',
       (info: {deviceAddress: string}) => {
-        console.log('Đã ngắt kết nối:', info);
         setConnectedDevices(prev =>
           prev.filter(d => d.address !== info.deviceAddress),
         );
       },
     );
 
-    // Listener: Mất kết nối
     const connectionLostListener = BluetoothModule.addEventListener(
       'onConnectionLost',
       (info: {deviceAddress: string}) => {
-        console.log('Mất kết nối:', info);
         setConnectedDevices(prev =>
           prev.filter(d => d.address !== info.deviceAddress),
         );
@@ -373,12 +388,9 @@ const ListMessageScreen = () => {
       },
     );
 
-    // Listener: Kết nối thất bại
     const connectionFailedListener = BluetoothModule.addEventListener(
       'onConnectionFailed',
       (error: {error: string; deviceName?: string; deviceAddress?: string}) => {
-        console.log('Kết nối thất bại:', error);
-
         const title = error.deviceName
           ? `❌ Không thể kết nối với ${error.deviceName}`
           : '❌ Kết nối thất bại';
@@ -402,7 +414,6 @@ const ListMessageScreen = () => {
 
     return () => {
       messageReceivedListener.remove();
-      // imageReceivedListener.remove();
       deviceFoundListener.remove();
       discoveryFinishedListener.remove();
       connectedListener.remove();
@@ -412,82 +423,16 @@ const ListMessageScreen = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const init = async () => {
-      const hasPermission = await requestPermissions();
-      if (!hasPermission) {
-        Alert.alert(
-          '⚠️ Quyền bị từ chối',
-          'Cần cấp quyền Bluetooth và Location để sử dụng tính năng này',
-        );
-        return;
-      }
-
-      const enabled = await checkAndEnableBluetooth();
-      if (enabled) {
-        await autoRename();
-        await initializeBluetoothServer();
-      }
-    };
-
-    init();
-
-    return () => {
-      BluetoothModule.disconnectAll().catch(console.error);
-      BluetoothModule.stopDiscovery().catch(console.error);
-    };
+  const handleRoomPress = useCallback((roomResponse: RoomResponse) => {
+    navigate('ChatStack', {
+      screen: 'Message',
+      params: {
+        roomId: roomResponse.id,
+        receiver: roomResponse.receiver,
+      },
+    });
   }, []);
 
-  useEffect(() => {
-    fetchAll();
-    if (isEnabled) {
-      initializeBluetoothServer();
-    }
-  }, [isEnabled, initializeBluetoothServer]);
-
-  const handleConnected = useCallback(
-    async (isConnectedDevice: boolean, item: BluetoothDevice) => {
-      console.log('isConnectedDevice', item.name);
-      if (!isConnectedDevice) {
-        await connectTo(item);
-      } else {
-        // Lấy room info từ ref
-        const roomInfo = roomInfoRef.current[item.address];
-        console.log('roomInfo', roomInfo);
-        if (roomInfo) {
-          // Đã có room info, navigate với params đầy đủ
-          handleNavigateToChat(roomInfo);
-        } else {
-          // Chưa có room info, chờ 1 chút rồi thử lại
-          Alert.alert(
-            '⏳ Đang đồng bộ...',
-            'Vui lòng chờ giây lát để đồng bộ thông tin room',
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  // Thử lại sau 2s
-                  setTimeout(() => {
-                    const updatedRoomInfo = roomInfoRef.current[item.address];
-                    if (updatedRoomInfo) {
-                      console.log('updatedRoomInfo', updatedRoomInfo);
-                      handleNavigateToChat(updatedRoomInfo);
-                    } else {
-                      Alert.alert(
-                        '❌ Lỗi',
-                        'Không thể đồng bộ thông tin room. Vui lòng thử lại.',
-                      );
-                    }
-                  }, 2000);
-                },
-              },
-            ],
-          );
-        }
-      }
-    },
-    [connectTo],
-  );
   const handleNavigateToChat = useCallback((roomInfo: RoomInfo) => {
     navigate('ChatStack', {
       screen: 'Message',
@@ -497,28 +442,9 @@ const ListMessageScreen = () => {
       },
     });
   }, []);
-  const renderDevice = useCallback(
-    ({item}: {item: BluetoothDevice}) => {
-      const isConnectedDevice = connectedDevices.some(
-        d => d.address === item.address,
-      );
-
-      return (
-        <DeviceItem
-          item={item}
-          isConnectedDevice={isConnectedDevice}
-          onConnected={handleConnected}
-          connectTo={connectTo}
-          disconnect={disconnect}
-        />
-      );
-    },
-    [connectedDevices, connectTo, disconnect, handleConnected],
-  );
 
   const handleChatAI = useCallback(async () => {
     const ai = await getUserByAttributes({system: true});
-    console.log('ai', ai);
     if (!user?.id || !ai?.id) return;
     const room = await getRoomByMember(user?.id, ai?.id);
     navigate('ChatStack', {
@@ -529,121 +455,181 @@ const ListMessageScreen = () => {
       },
     });
   }, []);
-  return (
-    <Box
-      flex={1}
-      backgroundColor={colors.background}
-      px={16}
-      pt={top}
-      pb={bottom}>
-      <Text fontSize={26} fontWeight="bold" align="center" color="#333">
-        💬 Chat qua Bluetooth
-      </Text>
 
-      {/* Trạng thái */}
-      <Box backgroundColor="white" p={14} borderRadius={12} mb={16}>
-        <Text fontSize={14} color="#666">
-          Bluetooth: {isEnabled ? '✅ Đã bật' : '❌ Chưa bật'}
-        </Text>
-        {connectedDevices.length > 0 && (
-          <Text fontSize={14} color="#666">
-            ✅ Đã kết nối với {connectedDevices.length} thiết bị
-          </Text>
-        )}
+  return (
+    <Box flex={1} backgroundColor="#F5F5F5">
+      {/* Custom Header with Search */}
+      <Box
+        backgroundColor="white"
+        pt={top + 10}
+        pb={12}
+        px={16}
+        flexDirection="row"
+        alignItems="center"
+        justifyContent="space-between"
+        style={{
+          shadowColor: '#000',
+          shadowOffset: {width: 0, height: 1},
+          shadowOpacity: 0.05,
+          shadowRadius: 2,
+          elevation: 3,
+          zIndex: 10,
+        }}>
+        <HeaderSearch value={searchText} onChangeText={setSearchText} />
       </Box>
 
-      {/* Nút ngắt kết nối */}
-      {connectedDevices.length > 0 && (
-        <Box mb={16} flexDirection="row" justifyContent="flex-end">
-          <TouchableOpacity onPress={disconnectAll}>
+      <FlatList
+        data={displayDevices}
+        contentContainerStyle={{paddingBottom: bottom + 20}}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            onRefresh={onRefresh}
+            tintColor="transparent"
+            colors={['transparent']}
+          />
+        }
+        ListHeaderComponent={
+          <Box px={16} pt={16}>
+            {/* Bluetooth Toggle Section */}
             <Box
-              backgroundColor="#FF3B30"
-              py={12}
-              px={20}
-              borderRadius={8}
-              alignItems="center">
-              <Text color="white" fontWeight="bold">
-                ❌ Ngắt tất cả ({connectedDevices.length})
-              </Text>
-            </Box>
-          </TouchableOpacity>
-        </Box>
-      )}
-
-      {discovering && (
-        <Box
-          flexDirection="row"
-          alignItems="center"
-          justifyContent="center"
-          p={14}
-          backgroundColor="white"
-          borderRadius={12}
-          mb={16}>
-          <ActivityIndicator size="small" color="#007AFF" />
-          <Text color="#666" fontSize={14}>
-            Đang tìm thiết bị chạy app...
-          </Text>
-        </Box>
-      )}
-
-      <Box flex={1}>
-        {devices.length > 0 && (
-          <Box mb={10}>
-            <Text fontSize={16} fontWeight="bold" color="#333">
-              📱 Thiết bị khả dụng ({devices.length})
-            </Text>
-          </Box>
-        )}
-        <FlatList
-          data={devices}
-          keyExtractor={(item, index) => `${item.address}-${index}`}
-          renderItem={renderDevice}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={discovering}
-              onRefresh={startDiscovery}
-              colors={['#007AFF']}
-              tintColor="#007AFF"
-              title="Kéo để quét thiết bị"
-              titleColor="#666"
-            />
-          }
-          ListHeaderComponent={
-            <TouchableOpacity onPress={handleChatAI}>
-              <Box
-                backgroundColor="white"
-                p={16}
-                mb={10}
-                borderRadius={12}
-                flexDirection="row"
-                alignItems="center">
-                <Box flex={1}>
-                  <Text fontSize={17} fontWeight="bold" color="#333">
-                    AI
-                  </Text>
-                </Box>
-              </Box>
-            </TouchableOpacity>
-          }
-          ListEmptyComponent={
-            !discovering ? (
-              <Box flex={1} justifyContent="center" alignItems="center" py={60}>
-                <Text fontSize={64}>📱</Text>
-                <Box mb={8}>
-                  <Text fontSize={18} fontWeight="bold" color="#666">
-                    Chưa tìm thấy thiết bị nào
-                  </Text>
-                </Box>
-                <Text fontSize={14} color="#999" align="center">
-                  Kéo xuống để quét thiết bị{'\n'}
-                  hoặc đợi người khác kết nối đến bạn
+              flexDirection="row"
+              justifyContent="space-between"
+              alignItems="center"
+              mb={20}
+              backgroundColor="white"
+              p={16}
+              borderRadius={16}
+              style={{
+                shadowColor: '#000',
+                shadowOffset: {width: 0, height: 2},
+                shadowOpacity: 0.05,
+                shadowRadius: 4,
+                elevation: 2,
+              }}>
+              <Box flex={1} mr={16}>
+                <Text fontSize={16} fontWeight="bold" color="#333">
+                  Bluetooth
+                </Text>
+                <Text fontSize={13} color="#888">
+                  {isBluetoothOn
+                    ? discovering
+                      ? 'Đang quét thiết bị xung quanh...'
+                      : 'Đã bật & sẵn sàng kết nối'
+                    : 'Bật để tìm kiếm thiết bị'}
                 </Text>
               </Box>
-            ) : null
-          }
-        />
-      </Box>
+              <Switch
+                trackColor={{false: '#e0e0e0', true: colors.primary}}
+                thumbColor={'#fff'}
+                ios_backgroundColor="#e0e0e0"
+                onValueChange={handleToggleBluetooth}
+                value={isBluetoothOn}
+              />
+            </Box>
+
+            {/* AI Chat Entry */}
+            <RoomItem
+              name="Trợ lý AI"
+              isAI={true}
+              onPress={handleChatAI}
+              lastMessage={{
+                message: 'Sẵn sàng hỗ trợ bạn mọi lúc',
+                type: 'text',
+              }}
+            />
+
+            {/* Saved Rooms Section */}
+            {filteredRooms.length > 0 && (
+              <Box mb={8} mt={16}>
+                <Box
+                  mb={12}
+                  flexDirection="row"
+                  justifyContent="space-between"
+                  alignItems="center">
+                  <Text fontSize={16} fontWeight="bold" color="#333">
+                    Tin nhắn ({filteredRooms.length})
+                  </Text>
+                </Box>
+                {filteredRooms.map(room => {
+                  const deviceAddress = room.receiver?.deviceAddress;
+                  const matchedDevice = deviceAddress
+                    ? onlineDevicesMap.get(deviceAddress)
+                    : undefined;
+                  const isOnline = !!matchedDevice;
+                  const isConnected = deviceAddress
+                    ? connectedDevices.some(d => d.address === deviceAddress)
+                    : false;
+
+                  return (
+                    <RoomItem
+                      key={room.id}
+                      name={formatName(room.receiver.name) || 'Unknown'}
+                      avatar={room.receiver.image}
+                      lastMessage={room.lastMessage}
+                      updatedAt={room.updatedAt || room.createdAt}
+                      onPress={() => handleRoomPress(room)}
+                      isScanned={isOnline}
+                      isConnected={isConnected}
+                      onConnect={() =>
+                        matchedDevice && connectTo(matchedDevice)
+                      }
+                      onDisconnect={() =>
+                        matchedDevice && disconnect(matchedDevice.address)
+                      }
+                    />
+                  );
+                })}
+              </Box>
+            )}
+
+            {/* Devices Section Header - Only show if we have devices locally */}
+            {displayDevices.length > 0 && (
+              <Box
+                mb={12}
+                mt={16}
+                flexDirection="row"
+                justifyContent="space-between"
+                alignItems="center">
+                <Text fontSize={16} fontWeight="bold" color="#333">
+                  Thiết bị gần đây ({displayDevices.length})
+                </Text>
+                {discovering && (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                )}
+              </Box>
+            )}
+          </Box>
+        }
+        renderItem={({item}) => (
+          <Box px={16} mb={10}>
+            <DeviceItem
+              item={item}
+              isConnectedDevice={connectedDevices.some(
+                d => d.address === item.address,
+              )}
+              connectTo={connectTo}
+              disconnect={disconnect}
+              onConnected={(isConnected, device) =>
+                isConnected ? disconnect(device.address) : connectTo(device)
+              }
+            />
+          </Box>
+        )}
+        keyExtractor={item => item.address}
+        ListEmptyComponent={
+          discovering ? (
+            <Box alignItems="center" py={20}>
+              <Text color="#999">Đang tìm kiếm thiết bị...</Text>
+            </Box>
+          ) : displayDevices.length === 0 ? (
+            <Box alignItems="center" py={20}>
+              <Text color="#999">Không tìm thấy thiết bị nào</Text>
+            </Box>
+          ) : null
+        }
+      />
     </Box>
   );
 };

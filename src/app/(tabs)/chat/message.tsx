@@ -1,5 +1,5 @@
 import {StyleSheet, Alert, ActivityIndicator, StatusBar} from 'react-native';
-import React, {useCallback, useEffect, useState, useRef} from 'react';
+import React, {useCallback, useEffect, useState, useRef, useMemo} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import BluetoothModule from '../../../assets/managers/BluetoothModule';
 import {launchImageLibrary} from 'react-native-image-picker';
@@ -20,8 +20,10 @@ import {MessageEntity} from '@/database/entities/MessageEntity';
 import {userStore} from '@/store/userStore';
 import {useGetMessagesByRoomId} from '@/features/chat/hooks/useGetMessagesByRoomId';
 import {useCreateMessage} from '@/features/chat/hooks/useCreateMessage';
+import {useDeleteMessage} from '@/features/chat/hooks/useDeleteMessage';
 import {v4} from 'uuid';
 import HeaderChat from '@/features/chat/components/HeaderChat';
+import SearchBar from '@/features/chat/components/SearchBar';
 
 interface BluetoothDevice {
   name: string;
@@ -36,6 +38,7 @@ const MessageScreen = () => {
   console.log('Route params:', route.params);
   const {user} = userStore();
   const {mutateAsync: createMessage} = useCreateMessage();
+  const {mutateAsync: deleteMessage} = useDeleteMessage();
   const [bluetoothName, setBluetoothName] = useState<string>('');
   const [bluetoothAddress, setBluetoothAddress] = useState<string>('');
   const [connectedDevices, setConnectedDevices] = useState<BluetoothDevice[]>(
@@ -43,6 +46,12 @@ const MessageScreen = () => {
   );
   const [isLoading, setIsLoading] = useState(false);
   const insets = useSafeAreaInsets();
+
+  // Search states
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [searchResults, setSearchResults] = useState<string[]>([]);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
 
   // Fetch messages từ DB theo roomId
   const {data: messages, isLoading: isLoadingMessages} = useGetMessagesByRoomId(
@@ -207,11 +216,102 @@ const MessageScreen = () => {
       Alert.alert('❌ Lỗi', error.message || 'Không thể chọn/gửi ảnh');
     }
   };
-  const handleSearch = () => {};
+
+  // Search logic
+  useEffect(() => {
+    if (searchText.trim().length === 0) {
+      setSearchResults([]);
+      setCurrentSearchIndex(0);
+      return;
+    }
+
+    const results: string[] = [];
+    const searchLower = searchText.toLowerCase();
+
+    (messages || []).forEach(msg => {
+      if (msg.message && msg.message.toLowerCase().includes(searchLower)) {
+        results.push(msg.id);
+      }
+    });
+
+    setSearchResults(results);
+    setCurrentSearchIndex(0);
+  }, [searchText, messages]);
+
+  const handleSearch = useCallback(() => {
+    setShowSearch(prev => !prev);
+    if (showSearch) {
+      // Close search
+      setSearchText('');
+      setSearchResults([]);
+      setCurrentSearchIndex(0);
+    }
+  }, [showSearch]);
+
+  const handleSearchPrevious = useCallback(() => {
+    if (searchResults.length > 0) {
+      setCurrentSearchIndex(prev =>
+        prev > 0 ? prev - 1 : searchResults.length - 1,
+      );
+    }
+  }, [searchResults]);
+
+  const handleSearchNext = useCallback(() => {
+    if (searchResults.length > 0) {
+      setCurrentSearchIndex(prev =>
+        prev < searchResults.length - 1 ? prev + 1 : 0,
+      );
+    }
+  }, [searchResults]);
+
+  const currentHighlightedMessageId = useMemo(() => {
+    return searchResults.length > 0
+      ? searchResults[currentSearchIndex]
+      : undefined;
+  }, [searchResults, currentSearchIndex]);
+
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      Alert.alert('Xóa tin nhắn', 'Bạn có chắc chắn muốn xóa tin nhắn này?', [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteMessage(messageId);
+            } catch (error) {
+              console.error('Failed to delete message:', error);
+              Alert.alert('Lỗi', 'Không thể xóa tin nhắn');
+            }
+          },
+        },
+      ]);
+    },
+    [deleteMessage],
+  );
+
   return (
     <Box style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={'#4FACFE'} />
-      <HeaderChat name={route.params.receiver?.name} onSearch={handleSearch} />
+      <HeaderChat
+        name={formatName(route.params.receiver?.name)}
+        onSearch={handleSearch}
+      />
+
+      <SearchBar
+        visible={showSearch}
+        searchText={searchText}
+        onSearchTextChange={setSearchText}
+        onClose={handleSearch}
+        currentIndex={currentSearchIndex}
+        totalResults={searchResults.length}
+        onPrevious={handleSearchPrevious}
+        onNext={handleSearchNext}
+      />
 
       <CustomChatView
         messages={messages || []}
@@ -221,6 +321,10 @@ const MessageScreen = () => {
         onImagePress={pickImage}
         placeholder="Nhập tin nhắn..."
         showImageButton={true}
+        highlightedMessageId={currentHighlightedMessageId}
+        scrollToMessageId={currentHighlightedMessageId}
+        hideInput={showSearch}
+        onDeleteMessage={handleDeleteMessage}
       />
 
       {isLoading && (

@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import {useQuery} from '@tanstack/react-query';
 
-import { QueryConfig } from '@/types/api';
-import { getRoomsByUserId } from '../api/getRoomsByUserId';
+import {QueryConfig} from '@/types/api';
+import {getRoomsByUserId} from '../api/getRoomsByUserId';
 
 type useGetRoomsByUserIdOptions = {
   id: string;
