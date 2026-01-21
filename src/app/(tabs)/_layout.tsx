@@ -32,6 +32,7 @@ import {Room} from '@/database/entities/Room';
 import {User} from '@/database/entities/User';
 import {v4} from 'uuid';
 import {RoomInfo, ImageChunk} from '@/features/chat/types';
+import {useQueryClient} from '@tanstack/react-query';
 
 const Tab = createBottomTabNavigator();
 
@@ -40,6 +41,7 @@ export default function TabStack() {
   const {user, setUser} = userStore();
   const {mutateAsync: createUser, isPending} = useCreateUser();
   const {mutateAsync: createMessage} = useCreateMessage();
+  const queryClient = useQueryClient();
 
   const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
   const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
@@ -49,9 +51,12 @@ export default function TabStack() {
   const handleNavigateToChat = (roomInfo: RoomInfo) => {
     if (!roomInfo) return;
     console.log('🚀 Navigating to chat room:', roomInfo.roomId);
-    navigate('MessageScreen', {
-      roomId: roomInfo.roomId,
-      receiver: roomInfo.receiver,
+    navigate('ChatStack', {
+      screen: 'MessageScreen',
+      params: {
+        roomId: roomInfo.roomId,
+        receiver: roomInfo.receiver,
+      },
     });
   };
 
@@ -75,6 +80,12 @@ export default function TabStack() {
       if (sender.birthday) cleanSender.birthday = sender.birthday;
 
       await createUser(cleanSender as User);
+      console.log(
+        `✅ Updated User "${sender.name}" with deviceAddress: ${senderAddress}`,
+      );
+
+      // Invalidate rooms cache to refresh with new deviceAddress
+      queryClient.invalidateQueries({queryKey: ['rooms']});
 
       // Get/Create deterministic room
       const room = await getRoomByMember(currentUser.id, sender.id);
@@ -139,6 +150,13 @@ export default function TabStack() {
       if (receiver.email) cleanReceiver.email = receiver.email;
 
       await createUser(cleanReceiver as User);
+      console.log(
+        `✅ Updated User "${receiver.name}" with deviceAddress: ${receiverAddress}`,
+      );
+
+      // Invalidate rooms cache
+      queryClient.invalidateQueries({queryKey: ['rooms']});
+
       handleNavigateToChat(roomInfoRef.current[receiverAddress]);
     } catch (error) {
       console.error('❌ Error handling room info:', error);

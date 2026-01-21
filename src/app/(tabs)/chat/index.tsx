@@ -114,13 +114,34 @@ const ListMessageScreen = () => {
 
   // Filter out devices that are already linked to a room
   const displayDevices = useMemo(() => {
+    console.log(
+      '🔍 Filtering devices. Total rooms:',
+      rooms.length,
+      'Total scanned devices:',
+      filteredDevices.length,
+    );
+
     const list = filteredDevices.filter(device => {
-      // Check if this device belongs to any room's receiver
-      const isLinkedToRoom = rooms.some(
-        room => room.receiver?.deviceAddress === device.address,
-      );
-      return !isLinkedToRoom;
+      // Check if this device belongs to any room's receiver (case-insensitive)
+      const isLinkedToRoom = rooms.some(room => {
+        const roomAddress = room.receiver?.deviceAddress?.toLowerCase();
+        const deviceAddress = device.address?.toLowerCase();
+
+        if (!roomAddress || !deviceAddress) return false;
+
+        const matches = roomAddress === deviceAddress;
+        if (matches) {
+          console.log(
+            `✅ Found match! Device "${device.name}" (${device.address}) already has room with "${room.receiver?.name}"`,
+          );
+        }
+        return matches;
+      });
+
+      return !isLinkedToRoom; // Only keep devices NOT linked to any room
     });
+
+    console.log('📱 Devices to display (not in rooms):', list.length);
 
     // Sort: Online first, then Offline. Secondary sort by name.
     return list.sort((a, b) => {
@@ -313,20 +334,63 @@ const ListMessageScreen = () => {
   }, []);
 
   const handleRoomPress = useCallback((roomResponse: RoomResponse) => {
-    navigate('MessageScreen', {
-      roomId: roomResponse.id,
-      receiver: roomResponse.receiver,
+    navigate('ChatStack', {
+      screen: 'MessageScreen',
+      params: {
+        roomId: roomResponse.id,
+        receiver: roomResponse.receiver,
+      },
     });
   }, []);
+
   const handleChatAI = useCallback(async () => {
     const ai = await getUserByAttributes({system: true});
     if (!user?.id || !ai?.id) return;
     const room = await getRoomByMember(user?.id, ai?.id);
-    navigate('ChatAIScreen', {
-      roomId: room.id,
-      receiver: ai,
+    navigate('ChatStack', {
+      screen: 'ChatAIScreen',
+      params: {
+        roomId: room.id,
+        receiver: ai,
+      },
     });
   }, []);
+
+  // Merge Rooms and New Devices
+  const mergedList = useMemo(() => {
+    const list = [];
+
+    // 1. Add Rooms (Updated with Online Status)
+    filteredRooms.forEach(room => {
+      list.push({type: 'room', data: room});
+    });
+
+    // 2. Add New Devices (Not linked to any room)
+    displayDevices.forEach(device => {
+      list.push({type: 'device', data: device});
+    });
+
+    // Sort: Online/Connected first, then by time/name
+    return list.sort((a, b) => {
+      // Logic sort complicated? Keep simple for now: Rooms first (usually chatted recently), then devices.
+      // Or prioritize Online?
+      // User didn't specify sort, but "gộp lại" implies single view.
+      // Let's rely on Room vs Device distinction for now or just append.
+      // Actually, let's put Online items at top.
+      const isOnlineA =
+        a.type === 'room'
+          ? !!onlineDevicesMap.get(a.data.receiver?.deviceAddress || '')
+          : true; // Device in displayDevices is by definition scanned (online-ish) or at least visible
+
+      const isOnlineB =
+        b.type === 'room'
+          ? !!onlineDevicesMap.get(b.data.receiver?.deviceAddress || '')
+          : true;
+
+      if (isOnlineA !== isOnlineB) return isOnlineA ? -1 : 1;
+      return 0;
+    });
+  }, [filteredRooms, displayDevices, onlineDevicesMap]);
 
   return (
     <Box flex={1} backgroundColor="#F5F5F5">
@@ -351,7 +415,7 @@ const ListMessageScreen = () => {
       </Box>
 
       <FlatList
-        data={displayDevices}
+        data={mergedList}
         contentContainerStyle={{paddingBottom: bottom + 20}}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -412,94 +476,84 @@ const ListMessageScreen = () => {
               }}
             />
 
-            {/* Saved Rooms Section */}
-            {filteredRooms.length > 0 && (
-              <Box mb={8} mt={16}>
-                <Box
-                  mb={12}
-                  flexDirection="row"
-                  justifyContent="space-between"
-                  alignItems="center">
-                  <Text fontSize={16} fontWeight="bold" color="#333">
-                    Tin nhắn ({filteredRooms.length})
-                  </Text>
-                </Box>
-                {filteredRooms.map(room => {
-                  const deviceAddress = room.receiver?.deviceAddress;
-                  const matchedDevice = deviceAddress
-                    ? onlineDevicesMap.get(deviceAddress)
-                    : undefined;
-                  const isOnline = !!matchedDevice;
-                  const isConnected = deviceAddress
-                    ? connectedDevices.some(d => d.address === deviceAddress)
-                    : false;
-
-                  return (
-                    <RoomItem
-                      key={room.id}
-                      name={formatName(room.receiver.name) || 'Unknown'}
-                      avatar={room.receiver.image}
-                      lastMessage={room.lastMessage}
-                      updatedAt={room.updatedAt || room.createdAt}
-                      onPress={() => handleRoomPress(room)}
-                      isScanned={isOnline}
-                      isConnected={isConnected}
-                      onConnect={() =>
-                        matchedDevice && connectTo(matchedDevice)
-                      }
-                      onDisconnect={() =>
-                        matchedDevice && disconnect(matchedDevice.address)
-                      }
-                    />
-                  );
-                })}
-              </Box>
-            )}
-
-            {/* Devices Section Header - Only show if we have devices locally */}
-            {displayDevices.length > 0 && (
-              <Box
-                mb={12}
-                mt={16}
-                flexDirection="row"
-                justifyContent="space-between"
-                alignItems="center">
-                <Text fontSize={16} fontWeight="bold" color="#333">
-                  Thiết bị gần đây ({displayDevices.length})
-                </Text>
-                {discovering && (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                )}
-              </Box>
-            )}
+            <Box mb={12} mt={16}>
+              <Text fontSize={16} fontWeight="bold" color="#333">
+                Tin nhắn & Thiết bị ({mergedList.length})
+              </Text>
+            </Box>
           </Box>
         }
-        renderItem={({item}) => (
-          <Box px={16} mb={10}>
-            <DeviceItem
-              item={item}
-              isConnectedDevice={connectedDevices.some(
-                d => d.address === item.address,
-              )}
-              connectTo={connectTo}
-              disconnect={disconnect}
-              onConnected={(isConnected, device) =>
-                isConnected ? disconnect(device.address) : connectTo(device)
-              }
-            />
-          </Box>
-        )}
-        keyExtractor={item => item.address}
+        renderItem={({item}) => {
+          if (item.type === 'room') {
+            const room = item.data as RoomResponse;
+            const deviceAddress = room.receiver?.deviceAddress;
+            const matchedDevice = deviceAddress
+              ? onlineDevicesMap.get(deviceAddress)
+              : undefined;
+            const isOnline = !!matchedDevice;
+            const isConnected = deviceAddress
+              ? connectedDevices.some(d => d.address === deviceAddress)
+              : false;
+
+            return (
+              <Box px={16}>
+                <RoomItem
+                  key={room.id}
+                  name={formatName(room.receiver.name) || 'Unknown'}
+                  avatar={room.receiver.image}
+                  lastMessage={room.lastMessage}
+                  updatedAt={room.updatedAt || room.createdAt}
+                  onPress={() => handleRoomPress(room)}
+                  isScanned={isOnline}
+                  isConnected={isConnected}
+                  onConnect={() => matchedDevice && connectTo(matchedDevice)}
+                  onDisconnect={() =>
+                    matchedDevice && disconnect(matchedDevice.address)
+                  }
+                />
+              </Box>
+            );
+          } else {
+            // New Device (Not added friend yet)
+            const device = item.data as BluetoothDevice;
+            const isConnected = connectedDevices.some(
+              d => d.address === device.address,
+            );
+
+            return (
+              <Box px={16}>
+                <RoomItem
+                  key={device.address}
+                  name={formatName(device.name) || 'Người lạ'}
+                  avatar={null}
+                  lastMessage={{message: 'Thiết bị mới tìm thấy', type: 'text'}}
+                  updatedAt={new Date()} // Now
+                  onPress={() => connectTo(device)} // Auto connect on press? Or show modal?
+                  // For now, press = connect. Once connected, handshake creates room -> refreshes list -> becomes 'room' type.
+                  isScanned={true}
+                  isConnected={isConnected}
+                  onConnect={() => connectTo(device)}
+                  onDisconnect={() => disconnect(device.address)}
+                />
+              </Box>
+            );
+          }
+        }}
+        keyExtractor={item =>
+          item.type === 'room'
+            ? (item.data as RoomResponse).id
+            : (item.data as BluetoothDevice).address
+        }
         ListEmptyComponent={
           discovering ? (
             <Box alignItems="center" py={20}>
               <Text color="#999">Đang tìm kiếm thiết bị...</Text>
             </Box>
-          ) : displayDevices.length === 0 ? (
+          ) : (
             <Box alignItems="center" py={20}>
-              <Text color="#999">Không tìm thấy thiết bị nào</Text>
+              <Text color="#999">Không có tin nhắn nào</Text>
             </Box>
-          ) : null
+          )
         }
       />
     </Box>
