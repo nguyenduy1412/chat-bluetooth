@@ -92,7 +92,7 @@ const ListMessageScreen = () => {
   const filteredRooms = useMemo(() => {
     if (!searchText) return rooms;
     return rooms.filter(room =>
-      room.receiver.name?.toLowerCase().includes(searchText.toLowerCase()),
+      room.receiver?.name?.toLowerCase().includes(searchText.toLowerCase()),
     );
   }, [rooms, searchText]);
 
@@ -124,12 +124,19 @@ const ListMessageScreen = () => {
     const list = filteredDevices.filter(device => {
       // Check if this device belongs to any room's receiver (case-insensitive)
       const isLinkedToRoom = rooms.some(room => {
-        const roomAddress = room.receiver?.deviceAddress?.toLowerCase();
-        const deviceAddress = device.address?.toLowerCase();
+        const roomDeviceAddr = room.receiver?.deviceAddress;
+        const scannedDeviceAddr = device.address;
 
-        if (!roomAddress || !deviceAddress) return false;
+        // Ensure both are strings before comparing
+        if (
+          typeof roomDeviceAddr !== 'string' ||
+          typeof scannedDeviceAddr !== 'string'
+        ) {
+          return false;
+        }
 
-        const matches = roomAddress === deviceAddress;
+        const matches =
+          roomDeviceAddr.toLowerCase() === scannedDeviceAddr.toLowerCase();
         if (matches) {
           console.log(
             `✅ Found match! Device "${device.name}" (${device.address}) already has room with "${room.receiver?.name}"`,
