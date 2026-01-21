@@ -48,17 +48,8 @@ export const useBluetooth = () => {
       }
 
       setDiscovering(true);
+      // Clear devices list to start fresh scan
       setDevices([]);
-
-      // Get paired devices first (OFFLINE initially)
-      const pairedDevices = await BluetoothModule.getPairedDevices();
-      console.log('🔗 Đã lấy danh sách đã ghép đôi:', pairedDevices.length);
-
-      const validPairedDevices = pairedDevices
-        .filter(d => d.name && d.name.startsWith('BLE'))
-        .map(d => ({...d, isOnline: false})); // Mark as offline initially
-
-      setDevices(validPairedDevices);
 
       await BluetoothModule.startDiscovery();
       console.log('🔍 Bắt đầu quét thiết bị');

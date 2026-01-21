@@ -40,11 +40,11 @@ const DeviceItem = ({
             {item.bondState === 'BONDED' && !isConnectedDevice && (
               <Text
                 fontSize={12}
-                color={item.isOnline ? 'green' : '#666'}
+                color={item.isOnline ? 'green' : '#999'}
                 style={{fontStyle: 'italic'}}>
                 {item.isOnline
-                  ? ' • Đã ghép đôi (Online)'
-                  : ' • Đã ghép đôi (Offline)'}
+                  ? ' • Sẵn sàng kết nối'
+                  : ' • Đã lưu (Không tìm thấy)'}
               </Text>
             )}
           </Text>

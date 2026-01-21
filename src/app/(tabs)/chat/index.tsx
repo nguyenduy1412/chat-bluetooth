@@ -70,6 +70,11 @@ const ListMessageScreen = () => {
     },
   });
 
+  const roomsRef = useRef(rooms);
+  useEffect(() => {
+    roomsRef.current = rooms;
+  }, [rooms]);
+
   const {
     checkAndEnableBluetooth,
     startDiscovery,
@@ -114,12 +119,20 @@ const ListMessageScreen = () => {
 
   // Filter out devices that are already linked to a room
   const displayDevices = useMemo(() => {
-    return filteredDevices.filter(device => {
+    const list = filteredDevices.filter(device => {
       // Check if this device belongs to any room's receiver
       const isLinkedToRoom = rooms.some(
         room => room.receiver?.deviceAddress === device.address,
       );
       return !isLinkedToRoom;
+    });
+
+    // Sort: Online first, then Offline. Secondary sort by name.
+    return list.sort((a, b) => {
+      if (a.isOnline === b.isOnline) {
+        return (a.name || '').localeCompare(b.name || '');
+      }
+      return a.isOnline ? -1 : 1;
     });
   }, [filteredDevices, rooms]);
 
@@ -356,20 +369,44 @@ const ListMessageScreen = () => {
           ];
         });
 
-        if (user?.id) {
+        // 🚀 OPTIMISTIC NAVIGATION: Check if we already have a room with this device
+        const matchedRoom = roomsRef.current.find(
+          r => r.receiver?.deviceAddress === info.deviceAddress,
+        );
+        if (matchedRoom) {
+          console.log(
+            '🚀 Optimistic Navigation to existing room:',
+            matchedRoom.receiver.name,
+          );
+          handleRoomPress(matchedRoom);
+        }
+
+        // Get fresh user from store to avoid stale closure
+        const currentUser = userStore.getState().user;
+
+        if (currentUser?.id) {
           try {
             const userInfoData = {
               type: 'USER_INFO',
               user: {
-                id: user.id,
-                name: user.name,
-                image: user.image || '',
+                id: currentUser.id,
+                name: currentUser.name,
+                image: currentUser.image || '',
                 deviceAddress: info.deviceAddress,
               },
             };
-            await BluetoothModule.sendMessageToAll(
-              JSON.stringify(userInfoData),
-            );
+
+            // Wait 300ms for connection stability (enough for Android)
+            setTimeout(async () => {
+              try {
+                console.log('📤 Sending USER_INFO...');
+                await BluetoothModule.sendMessageToAll(
+                  JSON.stringify(userInfoData),
+                );
+              } catch (e) {
+                console.error('❌ Error sending user info after delay:', e);
+              }
+            }, 300);
           } catch (error) {
             console.error('❌ Error sending user info:', error);
           }

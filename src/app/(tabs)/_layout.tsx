@@ -20,8 +20,8 @@ import {userStore} from '@/store/userStore';
 import {useCreateUser} from '@/features/auth/hooks/useCreateUser';
 import {ensureDatabase} from '@/database/dataSource';
 import {getUserByAttributes} from '@/features/auth/api/getUserByAttributes';
-import { getAllUser } from '@/features/auth/api/getAllUser';
-import { MessageRepository } from '@/database/repositories/MessageRepository';
+import {getAllUser} from '@/features/auth/api/getAllUser';
+import {MessageRepository} from '@/database/repositories/MessageRepository';
 
 const Tab = createBottomTabNavigator();
 
@@ -33,18 +33,16 @@ export default function TabStack() {
   useEffect(() => {
     const initialize = async () => {
       try {
-
         loadModels();
         await ensureDatabase();
         console.log('✅ Database ready');
-        const listUser= await getAllUser();
+        const listUser = await getAllUser();
         const messageRepo = new MessageRepository();
         const allMessages = await messageRepo.findAll();
         console.log('✅ All messages:', allMessages);
         console.log('✅ List users:', listUser);
         if (user) {
           const userDB = await getUserByAttributes({idDevice: user?.idDevice});
-          console.log('userDB', userDB);
           if (!userDB) {
             console.log('Creating new user...');
             await createUser(user);
@@ -53,12 +51,12 @@ export default function TabStack() {
           }
         } else {
           console.log('Creating new user2...');
-            const res = await createUser({
-              name: 'BLEUser',
-            });
-            console.log('✅ User created:', res);
-            setUser(res);
-          }
+          const res = await createUser({
+            name: 'BLEUser',
+          });
+          console.log('✅ User created:', res);
+          setUser(res);
+        }
       } catch (error) {
         console.error('❌ Initialization error:', error);
       }
