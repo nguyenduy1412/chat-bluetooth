@@ -104,7 +104,8 @@ const ListMessageScreen = () => {
         device.address?.toLowerCase().includes(searchText.toLowerCase()),
     );
   }, [devices, searchText]);
-
+  console.log('filteredRooms',filteredRooms);
+  
   // Map discovered devices by address for quick lookup
   const onlineDevicesMap = useMemo(() => {
     const map = new Map<string, BluetoothDevice>();

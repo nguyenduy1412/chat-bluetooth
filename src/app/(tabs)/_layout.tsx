@@ -33,6 +33,8 @@ import {User} from '@/database/entities/User';
 import {v4} from 'uuid';
 import {RoomInfo, ImageChunk} from '@/features/chat/types';
 import {useQueryClient} from '@tanstack/react-query';
+import {useUpdateUser} from '@/features/auth/hooks/useUpdateUser';
+import {useBluetooth} from '@/features/chat/hooks/useBluetooth';
 
 const Tab = createBottomTabNavigator();
 
@@ -42,7 +44,8 @@ export default function TabStack() {
   const {mutateAsync: createUser, isPending} = useCreateUser();
   const {mutateAsync: createMessage} = useCreateMessage();
   const queryClient = useQueryClient();
-
+  const {mutateAsync: updateUser} = useUpdateUser();
+  const {initializeBluetoothServer,updateDeviceAddress} = useBluetooth();
   const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
   const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
 
@@ -78,7 +81,9 @@ export default function TabStack() {
 
       if (sender.email) cleanSender.email = sender.email;
       if (sender.birthday) cleanSender.birthday = sender.birthday;
-
+      if (sender.deviceAddress != user?.deviceAddress && user?.id) {
+        await updateDeviceAddress(senderAddress);
+      }
       await createUser(cleanSender as User);
       console.log(
         `✅ Updated User "${sender.name}" with deviceAddress: ${senderAddress}`,
@@ -96,7 +101,6 @@ export default function TabStack() {
       };
 
       // Reply with ROOM_INFO
-      const myAddress = currentUser.deviceAddress || '';
       const roomInfoData = {
         type: 'ROOM_INFO',
         room,
@@ -104,7 +108,7 @@ export default function TabStack() {
           id: currentUser.id,
           name: currentUser.name,
           image: currentUser.image || '',
-          deviceAddress: myAddress,
+          deviceAddress: senderAddress,
           email: currentUser.email,
         },
       };
@@ -135,7 +139,7 @@ export default function TabStack() {
           id: receiver.id,
           name: receiver.name,
           email: receiver.email,
-          deviceAddress: receiver.deviceAddress,
+          deviceAddress: '',
         },
       };
 
@@ -144,9 +148,12 @@ export default function TabStack() {
         id: receiver.id,
         name: receiver.name,
         image: receiver.image || '',
-        deviceAddress: receiver.deviceAddress,
+        deviceAddress: receiverAddress,
         idDevice: receiver.idDevice,
       };
+      if(receiver.deviceAddress && receiver.deviceAddress != user?.deviceAddress){
+        await updateDeviceAddress(receiverAddress);
+      }
       if (receiver.email) cleanReceiver.email = receiver.email;
 
       await createUser(cleanReceiver as User);
@@ -289,6 +296,9 @@ export default function TabStack() {
           console.log('✅ User created:', res);
           setUser(res);
         }
+
+        // Initialize Bluetooth server (from hook)
+        await initializeBluetoothServer();
       } catch (error) {
         console.error('❌ Initialization error:', error);
       }
