@@ -1,5 +1,10 @@
-import { useCallback, useState, useMemo } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, Switch } from 'react-native';
+import {useCallback, useState, useMemo} from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  Switch,
+} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {navigate} from '../../../utils/navigationUtils';
 import {Box} from '../../../components/common/Layout/Box';
@@ -8,54 +13,32 @@ import {colors} from '../../../theme/colors';
 import {getUserByAttributes} from '@/features/auth/api/getUserByAttributes';
 import {getRoomByMember} from '@/features/chat/api/getRoomByMember';
 import {userStore} from '@/store/userStore';
-import type { BluetoothDevice } from '@/features/chat/types';
+import type {BluetoothDevice} from '@/features/chat/types';
 import DeviceItem from '@/features/chat/components/DeviceItem';
 import {RoomItem} from '@/features/chat/components/RoomItem';
 import {HeaderSearch} from '@/features/chat/components/HeaderSearch';
-import {useBluetooth} from '@/features/chat/hooks/useBluetooth';
+import {useBluetoothContext} from '@/features/chat/context/BluetoothContext';
 import {formatName} from '@/features/chat/utils/formatName';
-
 
 const ListMessageScreen = () => {
   const {top, bottom} = useSafeAreaInsets();
   const {user} = userStore();
 
-  
   const [searchText, setSearchText] = useState('');
-  
+
   const {
-    checkAndEnableBluetooth,
-    startDiscovery,
     connectTo,
-    initializeBluetoothServer,
     disconnect,
-    disconnectAll,
     devices,
     discovering,
     isEnabled,
     connectedDevices,
-    setDevices,
-    setDiscovering,
-    setConnectedDevices,
-    autoRename,
-    updateDeviceAddress,
-    handleUserInfo,
-    roomInfoRef,
-    handleRoomInfo,
-    handleMessageReceived,
     handleRoomPress,
     rooms,
-    isLoadingRooms,
-    refetchRooms,
-    roomsRef,
-    imageChunksRef,
     onRefresh,
-    setIsBluetoothOn,
-    isBluetoothOn,
-    handleToggleBluetooth
-  } = useBluetooth();
+    handleToggleBluetooth,
+  } = useBluetoothContext();
 
-  
   const filteredRooms = useMemo(() => {
     if (!searchText) return rooms;
     return rooms.filter(room =>
@@ -72,24 +55,20 @@ const ListMessageScreen = () => {
     );
   }, [devices, searchText]);
 
-  
   const onlineDevicesMap = useMemo(() => {
     const map = new Map<string, BluetoothDevice>();
     devices.forEach(d => map.set(d.address, d));
     return map;
   }, [devices]);
 
-  
   const displayDevices = useMemo(() => {
     const list = filteredDevices.filter(device => {
-      
       const isLinkedToRoom = rooms.some(
         room => room.receiver?.deviceAddress === device.address,
       );
       return !isLinkedToRoom;
     });
 
-    
     return list.sort((a, b) => {
       if (a.isOnline === b.isOnline) {
         return (a.name || '').localeCompare(b.name || '');
@@ -168,7 +147,7 @@ const ListMessageScreen = () => {
                   Bluetooth
                 </Text>
                 <Text fontSize={13} color="#888">
-                  {isBluetoothOn
+                  {isEnabled
                     ? discovering
                       ? 'Đang quét thiết bị xung quanh...'
                       : 'Đã bật & sẵn sàng kết nối'
@@ -180,7 +159,7 @@ const ListMessageScreen = () => {
                 thumbColor={'#fff'}
                 ios_backgroundColor="#e0e0e0"
                 onValueChange={handleToggleBluetooth}
-                value={isBluetoothOn}
+                value={isEnabled}
               />
             </Box>
 

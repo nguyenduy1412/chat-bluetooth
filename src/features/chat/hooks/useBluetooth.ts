@@ -40,7 +40,6 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
   const {mutateAsync: createRoom} = useCreateRoom();
   const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
   const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
-  const [isBluetoothOn, setIsBluetoothOn] = useState(false);
   const {
     data: rooms = [],
     isLoading: isLoadingRooms,
@@ -406,12 +405,13 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
   }, []);
   const onRefresh = useCallback(() => {
     refetchRooms();
-    if (isBluetoothOn) {
+    console.log('isBluetoothOn', isEnabled);
+    if (isEnabled) {
       startDiscovery();
     }
-  }, [isBluetoothOn, refetchRooms, startDiscovery]);
+  }, [refetchRooms, startDiscovery]);
   const handleToggleBluetooth = async (value: boolean) => {
-    setIsBluetoothOn(value);
+    setIsEnabled(value);
     if (value) {
       const enabled = await checkAndEnableBluetooth();
       if (enabled) {
@@ -450,8 +450,7 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
     roomsRef,
     imageChunksRef,
     onRefresh,
-    isBluetoothOn,
-    setIsBluetoothOn,
     handleToggleBluetooth,
+    setIsEnabled,
   };
 };
