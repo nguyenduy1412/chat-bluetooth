@@ -1,16 +1,6 @@
-import {useEffect, useCallback, useRef, useState, useMemo} from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  RefreshControl,
-  Switch,
-  TouchableOpacity,
-  Platform,
-} from 'react-native';
+import { useCallback, useState, useMemo } from 'react';
+import { ActivityIndicator, FlatList, RefreshControl, Switch } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import BluetoothModule from '../../../assets/managers/BluetoothModule';
-import {requestPermissions} from '../../../utils/permission';
 import {navigate} from '../../../utils/navigationUtils';
 import {Box} from '../../../components/common/Layout/Box';
 import {Text} from '../../../components/common/Text/Text';
@@ -18,63 +8,21 @@ import {colors} from '../../../theme/colors';
 import {getUserByAttributes} from '@/features/auth/api/getUserByAttributes';
 import {getRoomByMember} from '@/features/chat/api/getRoomByMember';
 import {userStore} from '@/store/userStore';
-import type {
-  BluetoothDevice,
-  ImageChunk,
-  RoomInfo,
-  RoomResponse,
-} from '@/features/chat/types';
+import type { BluetoothDevice } from '@/features/chat/types';
 import DeviceItem from '@/features/chat/components/DeviceItem';
 import {RoomItem} from '@/features/chat/components/RoomItem';
 import {HeaderSearch} from '@/features/chat/components/HeaderSearch';
 import {useBluetooth} from '@/features/chat/hooks/useBluetooth';
-import {User} from '@/database/entities/User';
-import {Room} from '@/database/entities/Room';
-import {useCreateUser} from '@/features/auth/hooks/useCreateUser';
-import {RoomRepository} from '@/database/repositories/RoomRepository';
-import {UserRepository} from '@/database/repositories/UserRepository';
-import {createRoom} from '@/features/chat/api/createRoom';
-import {useCreateMessage} from '@/features/chat/hooks/useCreateMessage';
-import {useGetRoomsByUserId} from '@/features/chat/hooks/useGetRoomsByUserId';
-import {useQueryClient} from '@tanstack/react-query';
 import {formatName} from '@/features/chat/utils/formatName';
 
-const roomRepo = new RoomRepository();
-const userRepo = new UserRepository();
 
 const ListMessageScreen = () => {
   const {top, bottom} = useSafeAreaInsets();
   const {user} = userStore();
-  const queryClient = useQueryClient();
 
-  // State
+  
   const [searchText, setSearchText] = useState('');
-  const [isBluetoothOn, setIsBluetoothOn] = useState(false);
-
-  // Lưu room info cho mỗi device (key là deviceAddress)
-  const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
-  const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
-
-  const {mutateAsync: createUser} = useCreateUser();
-  const {mutateAsync: createMessage} = useCreateMessage();
-
-  // Fetch rooms with receiver info using hook
-  const {
-    data: rooms = [],
-    isLoading: isLoadingRooms,
-    refetch: refetchRooms,
-  } = useGetRoomsByUserId({
-    id: user?.id || '',
-    queryConfig: {
-      enabled: !!user?.id,
-    },
-  });
-
-  const roomsRef = useRef(rooms);
-  useEffect(() => {
-    roomsRef.current = rooms;
-  }, [rooms]);
-
+  
   const {
     checkAndEnableBluetooth,
     startDiscovery,
@@ -91,9 +39,23 @@ const ListMessageScreen = () => {
     setConnectedDevices,
     autoRename,
     updateDeviceAddress,
+    handleUserInfo,
+    roomInfoRef,
+    handleRoomInfo,
+    handleMessageReceived,
+    handleRoomPress,
+    rooms,
+    isLoadingRooms,
+    refetchRooms,
+    roomsRef,
+    imageChunksRef,
+    onRefresh,
+    setIsBluetoothOn,
+    isBluetoothOn,
+    handleToggleBluetooth
   } = useBluetooth();
 
-  // Filter logic
+  
   const filteredRooms = useMemo(() => {
     if (!searchText) return rooms;
     return rooms.filter(room =>
@@ -110,24 +72,24 @@ const ListMessageScreen = () => {
     );
   }, [devices, searchText]);
 
-  // Map discovered devices by address for quick lookup
+  
   const onlineDevicesMap = useMemo(() => {
     const map = new Map<string, BluetoothDevice>();
     devices.forEach(d => map.set(d.address, d));
     return map;
   }, [devices]);
 
-  // Filter out devices that are already linked to a room
+  
   const displayDevices = useMemo(() => {
     const list = filteredDevices.filter(device => {
-      // Check if this device belongs to any room's receiver
+      
       const isLinkedToRoom = rooms.some(
         room => room.receiver?.deviceAddress === device.address,
       );
       return !isLinkedToRoom;
     });
 
-    // Sort: Online first, then Offline. Secondary sort by name.
+    
     return list.sort((a, b) => {
       if (a.isOnline === b.isOnline) {
         return (a.name || '').localeCompare(b.name || '');
@@ -135,358 +97,6 @@ const ListMessageScreen = () => {
       return a.isOnline ? -1 : 1;
     });
   }, [filteredDevices, rooms]);
-
-  // Initial Auto Scan & Bluetooth Check
-  useEffect(() => {
-    const init = async () => {
-      const enabled = await checkAndEnableBluetooth();
-      setIsBluetoothOn(!!enabled);
-
-      if (enabled) {
-        await autoRename();
-        await initializeBluetoothServer();
-        // Tự động quét khi vào màn hình
-        startDiscovery();
-      }
-    };
-    init();
-  }, []); // Only run on mount
-
-  const handleToggleBluetooth = async (value: boolean) => {
-    setIsBluetoothOn(value);
-    if (value) {
-      const enabled = await checkAndEnableBluetooth();
-      if (enabled) {
-        await initializeBluetoothServer();
-        startDiscovery();
-      }
-    } else {
-      // Logic disable scan (module might not support explicit disable bluetooth)
-      setDiscovering(false);
-    }
-  };
-
-  const onRefresh = useCallback(() => {
-    refetchRooms();
-    if (isBluetoothOn) {
-      startDiscovery();
-    }
-  }, [isBluetoothOn, refetchRooms, startDiscovery]);
-
-  // ==================== XỬ LÝ TIN NHẮN & EVENTS ====================
-
-  const handleUserInfo = async (sender: User, senderAddress: string) => {
-    try {
-      if (!user?.id || !sender?.id) return;
-
-      await updateDeviceAddress(sender?.deviceAddress || '');
-      const room = await getRoomByMember(user.id, sender.id);
-
-      sender.deviceAddress = senderAddress;
-      await createUser(sender);
-
-      roomInfoRef.current[senderAddress] = {
-        roomId: room.id,
-        receiver: sender,
-      };
-
-      const myAddress = user.deviceAddress || '';
-      const roomInfoData = {
-        type: 'ROOM_INFO',
-        room,
-        user: {
-          id: user.id,
-          name: user.name,
-          image: user?.image || '',
-          deviceAddress: myAddress,
-        },
-      };
-
-      await BluetoothModule.sendMessageToAll(JSON.stringify(roomInfoData));
-      handleNavigateToChat(roomInfoRef.current[senderAddress]);
-    } catch (error) {
-      console.error('❌ Error handling user info:', error);
-    }
-  };
-
-  const handleRoomInfo = async (
-    room: Room,
-    receiver: User,
-    receiverAddress: string,
-  ) => {
-    try {
-      if (!room || !receiver) return;
-
-      await createRoom(room);
-
-      roomInfoRef.current[receiverAddress] = {
-        roomId: room.id,
-        receiver: {
-          id: receiver.id,
-          name: receiver.name,
-          email: receiver.email,
-          deviceAddress: receiver.deviceAddress,
-        },
-      };
-
-      await createUser(receiver);
-      handleNavigateToChat(roomInfoRef.current[receiverAddress]);
-    } catch (error) {
-      console.error('❌ Error handling room info:', error);
-    }
-  };
-
-  const handleMessageReceived = async (data: any) => {
-    const {message, deviceAddress} = data;
-    try {
-      const jsonData = JSON.parse(message);
-
-      if (jsonData.type === 'USER_INFO') {
-        await handleUserInfo(jsonData.user, deviceAddress);
-        return;
-      }
-
-      if (jsonData.type === 'ROOM_INFO') {
-        await handleRoomInfo(jsonData.room, jsonData.user, deviceAddress);
-        return;
-      }
-
-      if (jsonData.id && jsonData.roomId) {
-        if (jsonData.type === 'text') {
-          await createMessage(jsonData);
-        } else if (jsonData.type === 'image') {
-          await handleImageChunk(jsonData, deviceAddress);
-        }
-        return;
-      }
-    } catch (e) {
-      console.error('❌ Error parsing message:', e);
-    }
-  };
-
-  const handleImageChunk = async (
-    messageEntity: any,
-    deviceAddress: string,
-  ) => {
-    const {
-      id: messageId,
-      message: chunk,
-      width,
-      height,
-      roomId,
-      created_by,
-      createdAt,
-    } = messageEntity;
-
-    if (!imageChunksRef.current[messageId]) {
-      imageChunksRef.current[messageId] = {
-        chunks: [],
-        totalChunks: 10,
-        receivedChunks: 0,
-        timestamp: new Date(createdAt).getTime(),
-        senderName: '',
-        deviceAddress,
-        width,
-        height,
-        roomId,
-        created_by,
-      };
-    }
-
-    const imageData = imageChunksRef.current[messageId];
-    imageData.chunks.push(chunk);
-    imageData.receivedChunks++;
-
-    if (imageData.receivedChunks >= imageData.totalChunks) {
-      const base64Image = imageData.chunks.join('');
-      try {
-        await createMessage({
-          id: messageId,
-          message: base64Image,
-          createdAt: new Date(imageData.timestamp),
-          type: 'image',
-          width: imageData.width || 0,
-          height: imageData.height || 0,
-          roomId: imageData.roomId,
-          created_by: imageData.created_by,
-          status: 'delivered',
-        });
-      } catch (error) {
-        console.error('❌ Error saving image to DB:', error);
-      }
-      delete imageChunksRef.current[messageId];
-    }
-  };
-
-  useEffect(() => {
-    const deviceFoundListener = BluetoothModule.addEventListener(
-      'onDeviceFound',
-      (device: BluetoothDevice) => {
-        if (
-          !device.name ||
-          device.name.toLowerCase() === 'unknown' ||
-          !device.name.startsWith('BLE')
-        ) {
-          return;
-        }
-        setDevices(prev => {
-          const index = prev.findIndex(d => d.address === device.address);
-
-          if (index !== -1) {
-            // Update exist device (mark Online)
-            const newDevices = [...prev];
-            newDevices[index] = {...newDevices[index], isOnline: true};
-            return newDevices;
-          }
-
-          // Add new device (Online)
-          return [...prev, {...device, isOnline: true}];
-        });
-      },
-    );
-
-    const discoveryFinishedListener = BluetoothModule.addEventListener(
-      'onDiscoveryFinished',
-      () => {
-        setDiscovering(false);
-      },
-    );
-
-    const messageReceivedListener = BluetoothModule.addEventListener(
-      'onMessageReceived',
-      async (data: any) => await handleMessageReceived(data),
-    );
-
-    const connectedListener = BluetoothModule.addEventListener(
-      'onConnected',
-      async (info: {deviceName: string; deviceAddress: string}) => {
-        setConnectedDevices(prev => {
-          const exists = prev.find(d => d.address === info.deviceAddress);
-          if (exists) return prev;
-          return [
-            ...prev,
-            {name: info.deviceName, address: info.deviceAddress},
-          ];
-        });
-
-        // 🚀 OPTIMISTIC NAVIGATION: Check if we already have a room with this device
-        const matchedRoom = roomsRef.current.find(
-          r => r.receiver?.deviceAddress === info.deviceAddress,
-        );
-        if (matchedRoom) {
-          console.log(
-            '🚀 Optimistic Navigation to existing room:',
-            matchedRoom.receiver.name,
-          );
-          handleRoomPress(matchedRoom);
-        }
-
-        // Get fresh user from store to avoid stale closure
-        const currentUser = userStore.getState().user;
-
-        if (currentUser?.id) {
-          try {
-            const userInfoData = {
-              type: 'USER_INFO',
-              user: {
-                id: currentUser.id,
-                name: currentUser.name,
-                image: currentUser.image || '',
-                deviceAddress: info.deviceAddress,
-              },
-            };
-
-            // Wait 300ms for connection stability (enough for Android)
-            setTimeout(async () => {
-              try {
-                console.log('📤 Sending USER_INFO...');
-                await BluetoothModule.sendMessageToAll(
-                  JSON.stringify(userInfoData),
-                );
-              } catch (e) {
-                console.error('❌ Error sending user info after delay:', e);
-              }
-            }, 300);
-          } catch (error) {
-            console.error('❌ Error sending user info:', error);
-          }
-        }
-      },
-    );
-
-    const disconnectedListener = BluetoothModule.addEventListener(
-      'onDisconnected',
-      (info: {deviceAddress: string}) => {
-        setConnectedDevices(prev =>
-          prev.filter(d => d.address !== info.deviceAddress),
-        );
-      },
-    );
-
-    const connectionLostListener = BluetoothModule.addEventListener(
-      'onConnectionLost',
-      (info: {deviceAddress: string}) => {
-        setConnectedDevices(prev =>
-          prev.filter(d => d.address !== info.deviceAddress),
-        );
-        Alert.alert('⚠️ Mất kết nối', 'Đã mất kết nối với thiết bị');
-      },
-    );
-
-    const connectionFailedListener = BluetoothModule.addEventListener(
-      'onConnectionFailed',
-      (error: {error: string; deviceName?: string; deviceAddress?: string}) => {
-        const title = error.deviceName
-          ? `❌ Không thể kết nối với ${error.deviceName}`
-          : '❌ Kết nối thất bại';
-
-        Alert.alert(title, error.error, [
-          {
-            text: 'Thử lại',
-            onPress: () => {
-              if (error.deviceAddress) {
-                const device = devices.find(
-                  d => d.address === error.deviceAddress,
-                );
-                if (device) connectTo(device);
-              }
-            },
-          },
-          {text: 'Đóng', style: 'cancel'},
-        ]);
-      },
-    );
-
-    return () => {
-      messageReceivedListener.remove();
-      deviceFoundListener.remove();
-      discoveryFinishedListener.remove();
-      connectedListener.remove();
-      disconnectedListener.remove();
-      connectionLostListener.remove();
-      connectionFailedListener.remove();
-    };
-  }, []);
-
-  const handleRoomPress = useCallback((roomResponse: RoomResponse) => {
-    navigate('ChatStack', {
-      screen: 'Message',
-      params: {
-        roomId: roomResponse.id,
-        receiver: roomResponse.receiver,
-      },
-    });
-  }, []);
-
-  const handleNavigateToChat = useCallback((roomInfo: RoomInfo) => {
-    navigate('ChatStack', {
-      screen: 'Message',
-      params: {
-        roomId: roomInfo.roomId,
-        receiver: roomInfo.receiver,
-      },
-    });
-  }, []);
 
   const handleChatAI = useCallback(async () => {
     const ai = await getUserByAttributes({system: true});

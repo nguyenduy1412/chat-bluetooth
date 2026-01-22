@@ -58,31 +58,6 @@ const MessageScreen = () => {
     route?.params?.roomId,
   );
 
-  useEffect(() => {
-    setupBluetoothListeners();
-
-    return () => {
-      BluetoothModule.removeAllListeners();
-    };
-  }, []);
-
-  const setupBluetoothListeners = () => {
-    // Chỉ lắng nghe kết nối/ngắt kết nối
-    BluetoothModule.addEventListener('onConnected', info => {
-      const device: BluetoothDevice = {
-        name: info.deviceName,
-        address: info.deviceAddress,
-        paired: true,
-      };
-      setConnectedDevices(prev => [...prev, device]);
-    });
-
-    BluetoothModule.addEventListener('onDisconnected', info => {
-      setConnectedDevices(prev =>
-        prev.filter(d => d.address !== info.deviceAddress),
-      );
-    });
-  };
 
   const handleSendMessage = async (text: string) => {
     console.log('Sending message:', text, connectedDevices);

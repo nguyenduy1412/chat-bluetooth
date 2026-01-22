@@ -1,9 +1,23 @@
 import {Alert} from 'react-native';
 import BluetoothModule from '../../../assets/managers/BluetoothModule';
-import {useCallback, useState} from 'react';
-import {BluetoothDevice, ConnectedDevice} from '../types';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  BluetoothDevice,
+  ConnectedDevice,
+  ImageChunk,
+  RoomInfo,
+  RoomResponse,
+} from '../types';
 import {useUpdateUser} from '@/features/auth/hooks/useUpdateUser';
 import {userStore} from '@/store/userStore';
+import {getRoomByMember} from '../api/getRoomByMember';
+import {User} from '@/database/entities/User';
+import {useCreateUser} from '@/features/auth/hooks/useCreateUser';
+import {useCreateMessage} from './useCreateMessage';
+import {navigate} from '@/utils/navigationUtils';
+import {Room} from '@/database/entities/Room';
+import {useCreateRoom} from './useCreateRoom';
+import {useGetRoomsByUserId} from './useGetRoomsByUserId';
 export const useBluetooth = () => {
   const [isEnabled, setIsEnabled] = useState(false);
   const [discovering, setDiscovering] = useState(false);
@@ -11,8 +25,29 @@ export const useBluetooth = () => {
   const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>(
     [],
   );
-  const {user} = userStore();
+  const {user,setUser} = userStore();
+  const {mutateAsync: createUser} = useCreateUser();
   const {mutateAsync: updateUser, isPending: isUpdating} = useUpdateUser();
+  const {mutateAsync: createMessage} = useCreateMessage();
+  const {mutateAsync: createRoom} = useCreateRoom();
+  const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
+  const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
+  const [isBluetoothOn, setIsBluetoothOn] = useState(false);
+  const {
+    data: rooms = [],
+    isLoading: isLoadingRooms,
+    refetch: refetchRooms,
+  } = useGetRoomsByUserId({
+    id: user?.id || '',
+    queryConfig: {
+      enabled: !!user?.id,
+    },
+  });
+
+  const roomsRef = useRef(rooms);
+  useEffect(() => {
+    roomsRef.current = rooms;
+  }, [rooms]);
   const checkAndEnableBluetooth = async () => {
     try {
       const available = await BluetoothModule.isBluetoothAvailable();
@@ -178,13 +213,191 @@ export const useBluetooth = () => {
       if (!user?.id || !deviceAddress || user.deviceAddress === deviceAddress)
         return;
 
-      await updateUser({
+      const userUpdated = await updateUser({
         id: user.id,
         data: {deviceAddress},
       });
+      setUser(userUpdated);
       console.log('✅ Cập nhật địa chỉ Bluetooth thành công:', deviceAddress);
     } catch (err) {
       console.error('❌ Lỗi khi cập nhật địa chỉ Bluetooth:', err);
+    }
+  };
+
+  const handleNavigateToChat = useCallback((roomInfo: RoomInfo) => {
+    navigate('ChatStack', {
+      screen: 'Message',
+      params: {
+        roomId: roomInfo.roomId,
+        receiver: roomInfo.receiver,
+      },
+    });
+  }, []);
+
+  const handleUserInfo = async (sender: User, senderAddress: string) => {
+    try {
+      if (!user?.id || !sender?.id) return;
+
+      await updateDeviceAddress(sender?.deviceAddress || '');
+      const room = await getRoomByMember(user.id, sender.id);
+
+      sender.deviceAddress = senderAddress;
+      const userCreated = await createUser(sender);
+
+      roomInfoRef.current[senderAddress] = {
+        roomId: room.id,
+        receiver: userCreated,
+      };
+
+      const roomInfoData = {
+        type: 'ROOM_INFO',
+        room,
+        user: {
+          id: user.id,
+          name: user.name,
+          image: user?.image || '',
+          deviceAddress: user.deviceAddress,
+        },
+      };
+
+      await BluetoothModule.sendMessageToAll(JSON.stringify(roomInfoData));
+      handleNavigateToChat(roomInfoRef.current[senderAddress]);
+    } catch (error) {
+      console.error('❌ Error handling user info:', error);
+    }
+  };
+  const handleRoomInfo = async (
+    room: Room,
+    receiver: User,
+    receiverAddress: string,
+  ) => {
+    try {
+      if (!room || !receiver) return;
+
+      await createRoom(room);
+
+      roomInfoRef.current[receiverAddress] = {
+        roomId: room.id,
+        receiver: {
+          id: receiver.id,
+          name: receiver.name,
+          email: receiver.email,
+          deviceAddress: receiver.deviceAddress,
+        },
+      };
+
+      await createUser(receiver);
+      handleNavigateToChat(roomInfoRef.current[receiverAddress]);
+    } catch (error) {
+      console.error('❌ Error handling room info:', error);
+    }
+  };
+  const handleImageChunk = async (
+    messageEntity: any,
+    deviceAddress: string,
+  ) => {
+    const {
+      id: messageId,
+      message: chunk,
+      width,
+      height,
+      roomId,
+      created_by,
+      createdAt,
+    } = messageEntity;
+
+    if (!imageChunksRef.current[messageId]) {
+      imageChunksRef.current[messageId] = {
+        chunks: [],
+        totalChunks: 10,
+        receivedChunks: 0,
+        timestamp: new Date(createdAt).getTime(),
+        senderName: '',
+        deviceAddress,
+        width,
+        height,
+        roomId,
+        created_by,
+      };
+    }
+
+    const imageData = imageChunksRef.current[messageId];
+    imageData.chunks.push(chunk);
+    imageData.receivedChunks++;
+
+    if (imageData.receivedChunks >= imageData.totalChunks) {
+      const base64Image = imageData.chunks.join('');
+      try {
+        await createMessage({
+          id: messageId,
+          message: base64Image,
+          createdAt: new Date(imageData.timestamp),
+          type: 'image',
+          width: imageData.width || 0,
+          height: imageData.height || 0,
+          roomId: imageData.roomId,
+          created_by: imageData.created_by,
+          status: 'delivered',
+        });
+      } catch (error) {
+        console.error('❌ Error saving image to DB:', error);
+      }
+      delete imageChunksRef.current[messageId];
+    }
+  };
+  const handleMessageReceived = async (data: any) => {
+    const {message, deviceAddress} = data;
+    try {
+      const jsonData = JSON.parse(message);
+
+      if (jsonData.type === 'USER_INFO') {
+        await handleUserInfo(jsonData.user, deviceAddress);
+        return;
+      }
+
+      if (jsonData.type === 'ROOM_INFO') {
+        await handleRoomInfo(jsonData.room, jsonData.user, deviceAddress);
+        return;
+      }
+
+      if (jsonData.id && jsonData.roomId) {
+        if (jsonData.type === 'text') {
+          await createMessage(jsonData);
+        } else if (jsonData.type === 'image') {
+          await handleImageChunk(jsonData, deviceAddress);
+        }
+        return;
+      }
+    } catch (e) {
+      console.error('❌ Error parsing message:', e);
+    }
+  };
+  const handleRoomPress = useCallback((roomResponse: RoomResponse) => {
+    navigate('ChatStack', {
+      screen: 'Message',
+      params: {
+        roomId: roomResponse.id,
+        receiver: roomResponse.receiver,
+      },
+    });
+  }, []);
+  const onRefresh = useCallback(() => {
+    refetchRooms();
+    if (isBluetoothOn) {
+      startDiscovery();
+    }
+  }, [isBluetoothOn, refetchRooms, startDiscovery]);
+  const handleToggleBluetooth = async (value: boolean) => {
+    setIsBluetoothOn(value);
+    if (value) {
+      const enabled = await checkAndEnableBluetooth();
+      if (enabled) {
+        await initializeBluetoothServer();
+        startDiscovery();
+      }
+    } else {
+      // Logic disable scan (module might not support explicit disable bluetooth)
+      setDiscovering(false);
     }
   };
   return {
@@ -203,5 +416,19 @@ export const useBluetooth = () => {
     setConnectedDevices,
     autoRename,
     updateDeviceAddress,
+    handleUserInfo,
+    roomInfoRef,
+    handleRoomInfo,
+    handleMessageReceived,
+    handleRoomPress,
+    rooms,
+    isLoadingRooms,
+    refetchRooms,
+    roomsRef,
+    imageChunksRef,
+    onRefresh,
+    isBluetoothOn,
+    setIsBluetoothOn,
+    handleToggleBluetooth
   };
 };
