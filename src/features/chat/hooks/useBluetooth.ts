@@ -18,14 +18,22 @@ import {navigate} from '@/utils/navigationUtils';
 import {Room} from '@/database/entities/Room';
 import {useCreateRoom} from './useCreateRoom';
 import {useGetRoomsByUserId} from './useGetRoomsByUserId';
-export const useBluetooth = () => {
+import {requestPermissions} from '@/utils/permission';
+
+type UseBluetoothOptions = {
+  isDatabaseReady?: boolean;
+};
+
+export const useBluetooth = (options: UseBluetoothOptions = {}) => {
+  const {isDatabaseReady = false} = options;
+
   const [isEnabled, setIsEnabled] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [devices, setDevices] = useState<BluetoothDevice[]>([]);
   const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>(
     [],
   );
-  const {user,setUser} = userStore();
+  const {user, setUser} = userStore();
   const {mutateAsync: createUser} = useCreateUser();
   const {mutateAsync: updateUser, isPending: isUpdating} = useUpdateUser();
   const {mutateAsync: createMessage} = useCreateMessage();
@@ -40,7 +48,8 @@ export const useBluetooth = () => {
   } = useGetRoomsByUserId({
     id: user?.id || '',
     queryConfig: {
-      enabled: !!user?.id,
+      // Chỉ enable query khi CẢ database lẫn user đều ready
+      enabled: isDatabaseReady && !!user?.id,
     },
   });
 
@@ -48,13 +57,27 @@ export const useBluetooth = () => {
   useEffect(() => {
     roomsRef.current = rooms;
   }, [rooms]);
+
   const checkAndEnableBluetooth = async () => {
     try {
+      // 1. XIN QUYỀN TRƯỚC - đây là bước quan trọng nhất trên Android 12+
+      const hasPermission = await requestPermissions();
+      if (!hasPermission) {
+        Alert.alert(
+          '❌ Thiếu quyền',
+          'Vui lòng cấp quyền Bluetooth để sử dụng tính năng này',
+        );
+        return false;
+      }
+
+      // 2. Kiểm tra thiết bị hỗ trợ Bluetooth
       const available = await BluetoothModule.isBluetoothAvailable();
       if (!available) {
         Alert.alert('❌ Lỗi', 'Thiết bị không hỗ trợ Bluetooth');
         return false;
       }
+
+      // 3. Kiểm tra Bluetooth đã bật chưa
       const enabled = await BluetoothModule.isBluetoothEnabled();
       setIsEnabled(enabled);
 
@@ -429,6 +452,6 @@ export const useBluetooth = () => {
     onRefresh,
     isBluetoothOn,
     setIsBluetoothOn,
-    handleToggleBluetooth
+    handleToggleBluetooth,
   };
 };

@@ -1,4 +1,4 @@
-import {useEffect} from 'react';
+import {useEffect, useState} from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
 import Lottie from 'lottie-react-native';
@@ -32,6 +32,12 @@ export default function TabStack() {
   const {loadModels} = useModelStore();
   const {user, setUser} = userStore();
   const {mutateAsync: createUser, isPending} = useCreateUser();
+
+  // State để track database đã sẵn sàng chưa
+  const [isDatabaseReady, setIsDatabaseReady] = useState(false);
+  // State để track Bluetooth đã sẵn sàng (đã có quyền) chưa
+  const [isBluetoothReady, setIsBluetoothReady] = useState(false);
+
   const {
     checkAndEnableBluetooth,
     startDiscovery,
@@ -55,7 +61,7 @@ export default function TabStack() {
     handleRoomPress,
     roomsRef,
     setIsBluetoothOn,
-  } = useBluetooth();
+  } = useBluetooth({isDatabaseReady});
 
   useEffect(() => {
     const initialize = async () => {
@@ -63,6 +69,9 @@ export default function TabStack() {
         loadModels();
         await ensureDatabase();
         console.log('✅ Database ready');
+        // Đánh dấu database đã sẵn sàng
+        setIsDatabaseReady(true);
+
         const listUser = await getAllUser();
         const messageRepo = new MessageRepository();
         const allMessages = await messageRepo.findAll();
@@ -91,6 +100,8 @@ export default function TabStack() {
 
     initialize();
   }, []);
+
+  // useEffect thứ 2: Xin quyền Bluetooth và enable
   useEffect(() => {
     const init = async () => {
       const enabled = await checkAndEnableBluetooth();
@@ -100,11 +111,20 @@ export default function TabStack() {
         await autoRename();
         await initializeBluetoothServer();
         startDiscovery();
+        // Đánh dấu Bluetooth đã sẵn sàng SAU KHI tất cả operations thành công
+        setIsBluetoothReady(true);
       }
     };
     init();
   }, []);
+
+  // useEffect thứ 3: Chỉ đăng ký listeners KHI Bluetooth đã sẵn sàng
   useEffect(() => {
+    // Không làm gì nếu Bluetooth chưa sẵn sàng
+    if (!isBluetoothReady) {
+      return;
+    }
+
     const deviceFoundListener = BluetoothModule.addEventListener(
       'onDeviceFound',
       (device: BluetoothDevice) => {
@@ -241,7 +261,7 @@ export default function TabStack() {
       connectionLostListener.remove();
       connectionFailedListener.remove();
     };
-  }, []);
+  }, [isBluetoothReady]); // Chỉ đăng ký listeners khi Bluetooth đã sẵn sàng
   return (
     <Tab.Navigator tabBar={props => <AnimatedTabBar {...props} />}>
       <Tab.Screen
