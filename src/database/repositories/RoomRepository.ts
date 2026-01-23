@@ -90,4 +90,11 @@ export class RoomRepository {
     const result = await this.repository.delete(id);
     return !!result.affected;
   }
+  // Delete all rooms (DANGEROUS: Resore only)
+  async deleteAll(): Promise<void> {
+    const rooms = await this.repository.find();
+    if (rooms.length > 0) {
+      await this.repository.remove(rooms);
+    }
+  }
 }

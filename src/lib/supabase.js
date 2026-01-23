@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import Config from 'react-native-config';
 // USA
 const supabaseURL = Config.SUPABASE_URL;
-const supabaseKey = Config.SUPABASE_ANON_KEY;
+const supabaseKey = Config.SUPABASE_KEY;
 
 export const supabase = createClient(supabaseURL, supabaseKey, {
   auth: {

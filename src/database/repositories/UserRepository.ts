@@ -72,6 +72,14 @@ export class UserRepository {
     return null;
   }
 
+  // Delete all users (DANGEROUS: Use for Restore only)
+  async deleteAll(): Promise<void> {
+    const users = await this.repository.find();
+    if (users.length > 0) {
+      await this.repository.remove(users);
+    }
+  }
+
   // Update isActive status
   async setActiveStatus(id: string, isActive: boolean): Promise<User | null> {
     return await this.update(id, {isActive});

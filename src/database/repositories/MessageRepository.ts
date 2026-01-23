@@ -1,4 +1,4 @@
-import { v4 } from 'uuid';
+import {v4} from 'uuid';
 import {AppDataSource} from '../dataSource';
 import {MessageEntity} from '../entities/MessageEntity';
 
@@ -50,7 +50,10 @@ export class MessageRepository {
   }
 
   // Update message status
-  async updateStatus(messageId: string, status: string): Promise<MessageEntity | null> {
+  async updateStatus(
+    messageId: string,
+    status: string,
+  ): Promise<MessageEntity | null> {
     await this.repository.update(messageId, {status});
     return await this.findById(messageId);
   }
@@ -94,5 +97,9 @@ export class MessageRepository {
   async deleteByRoomId(roomId: string): Promise<boolean> {
     const result = await this.repository.delete({roomId});
     return !!result.affected;
+  }
+  // Delete all messages (DANGEROUS: Restore only)
+  async deleteAll(): Promise<void> {
+    await this.repository.createQueryBuilder().delete().execute();
   }
 }
