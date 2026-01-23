@@ -27,7 +27,7 @@ type UseBluetoothOptions = {
 export const useBluetooth = (options: UseBluetoothOptions = {}) => {
   const {isDatabaseReady = false} = options;
 
-  const [isEnabled, setIsEnabled] = useState(false);
+
   const [discovering, setDiscovering] = useState(false);
   const [devices, setDevices] = useState<BluetoothDevice[]>([]);
   const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>(
@@ -40,6 +40,8 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
   const {mutateAsync: createRoom} = useCreateRoom();
   const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
   const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
+  const {isEnableBluetooth,setIsEnableBluetooth} = userStore();
+
   const {
     data: rooms = [],
     isLoading: isLoadingRooms,
@@ -78,13 +80,13 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
 
       // 3. Kiểm tra Bluetooth đã bật chưa
       const enabled = await BluetoothModule.isBluetoothEnabled();
-      setIsEnabled(enabled);
+      setIsEnableBluetooth(enabled);
 
       if (!enabled) {
         await BluetoothModule.enableBluetooth();
         setTimeout(async () => {
           const nowEnabled = await BluetoothModule.isBluetoothEnabled();
-          setIsEnabled(nowEnabled);
+          setIsEnableBluetooth(nowEnabled);
         }, 1000);
         return false;
       }
@@ -176,7 +178,7 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
     } catch (error: any) {
       console.error('Initialize server error:', error);
     }
-  }, [isEnabled]);
+  }, [isEnableBluetooth]);
 
   const disconnect = async (address: string) => {
     console.log('disconect');
@@ -405,13 +407,13 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
   }, []);
   const onRefresh = useCallback(() => {
     refetchRooms();
-    console.log('isBluetoothOn', isEnabled);
-    if (isEnabled) {
+    console.log('isBluetoothOn', isEnableBluetooth);
+    if (isEnableBluetooth) {
       startDiscovery();
     }
   }, [refetchRooms, startDiscovery]);
   const handleToggleBluetooth = async (value: boolean) => {
-    setIsEnabled(value);
+    setIsEnableBluetooth(value);
     if (value) {
       const enabled = await checkAndEnableBluetooth();
       if (enabled) {
@@ -424,7 +426,6 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
     }
   };
   return {
-    isEnabled,
     checkAndEnableBluetooth,
     startDiscovery,
     devices,
@@ -451,6 +452,5 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
     imageChunksRef,
     onRefresh,
     handleToggleBluetooth,
-    setIsEnabled,
   };
 };

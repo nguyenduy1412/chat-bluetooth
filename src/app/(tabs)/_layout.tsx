@@ -18,7 +18,6 @@ import MapScreen from './map';
 import useModelStore from '../../store/modelStore';
 import {userStore} from '@/store/userStore';
 import {useCreateUser} from '@/features/auth/hooks/useCreateUser';
-import {ensureDatabase} from '@/database/dataSource';
 import {getUserByAttributes} from '@/features/auth/api/getUserByAttributes';
 import {getAllUser} from '@/features/auth/api/getAllUser';
 import {MessageRepository} from '@/database/repositories/MessageRepository';
@@ -31,31 +30,74 @@ import {
 
 const Tab = createBottomTabNavigator();
 
-// Component chính chứa logic Bluetooth
+// Component chứa logic Bluetooth và Tab Navigator
 function TabStackContent() {
+  const {loadModels} = useModelStore();
+  const {user, setUser} = userStore();
+  const {mutateAsync: createUser} = useCreateUser();
+  const {isEnableBluetooth, setIsEnableBluetooth} = userStore();
+
+  // State để track Bluetooth đã sẵn sàng (đã có quyền) chưa
+  const [isBluetoothReady, setIsBluetoothReady] = useState(false);
+
   const {
     checkAndEnableBluetooth,
     startDiscovery,
+    connectTo,
     initializeBluetoothServer,
+    devices,
     setDevices,
     setDiscovering,
     setConnectedDevices,
     autoRename,
     handleMessageReceived,
-    devices,
-    connectTo,
-    setIsEnabled,
+    handleRoomPress,
+    roomsRef,
+    isDatabaseReady,
   } = useBluetoothContext();
 
-  // State để track Bluetooth đã sẵn sàng (đã có quyền) chưa
-  const [isBluetoothReady, setIsBluetoothReady] = useState(false);
+  // useEffect: Khởi tạo user khi database ready
+  useEffect(() => {
+    if (!isDatabaseReady) return;
+
+    const initUser = async () => {
+      try {
+        loadModels();
+        const listUser = await getAllUser();
+        const messageRepo = new MessageRepository();
+        const allMessages = await messageRepo.findAll();
+        console.log('✅ All messages:', allMessages);
+        console.log('✅ List users:', listUser);
+        if (user) {
+          const userDB = await getUserByAttributes({idDevice: user?.idDevice});
+          if (!userDB) {
+            console.log('Creating new user...');
+            await createUser(user);
+          } else {
+            setUser(userDB);
+          }
+        } else {
+          console.log('Creating new user2...');
+          const res = await createUser({
+            name: 'BLEUser',
+          });
+          console.log('✅ User created:', res);
+          setUser(res);
+        }
+      } catch (error) {
+        console.error('❌ User initialization error:', error);
+      }
+    };
+
+    initUser();
+  }, [isDatabaseReady]);
 
   // useEffect: Xin quyền Bluetooth và enable
   useEffect(() => {
     const init = async () => {
       const enabled = await checkAndEnableBluetooth();
       console.log('✅ Bluetooth enabled:', enabled);
-      setIsEnabled(enabled);
+      setIsEnableBluetooth(enabled);
 
       if (enabled) {
         await autoRename();
@@ -124,6 +166,38 @@ function TabStackContent() {
             {name: info.deviceName, address: info.deviceAddress},
           ];
         });
+
+        // 🚀 OPTIMISTIC NAVIGATION: Check if we already have a room with this device
+        const matchedRoom = roomsRef.current.find(
+          r => r.receiver?.deviceAddress === info.deviceAddress,
+        );
+        if (matchedRoom) {
+          console.log(
+            '🚀 Optimistic Navigation to existing room:',
+            matchedRoom.receiver.name,
+          );
+          handleRoomPress(matchedRoom);
+        }
+
+        if (user?.id) {
+          try {
+            const userInfoData = {
+              type: 'USER_INFO',
+              user: {
+                id: user.id,
+                name: user.name,
+                image: user.image || '',
+                deviceAddress: info.deviceAddress,
+              },
+            };
+
+            await BluetoothModule.sendMessageToAll(
+              JSON.stringify(userInfoData),
+            );
+          } catch (error) {
+            console.error('❌ Error sending user info:', error);
+          }
+        }
       },
     );
 
@@ -251,55 +325,10 @@ function TabStackContent() {
   );
 }
 
-// Component wrapper để khởi tạo database và Bluetooth Provider
+// Component wrapper với BluetoothProvider
 export default function TabStack() {
-  const {loadModels} = useModelStore();
-  const {user, setUser} = userStore();
-  const {mutateAsync: createUser} = useCreateUser();
-
-  // State để track database đã sẵn sàng chưa
-  const [isDatabaseReady, setIsDatabaseReady] = useState(false);
-
-  useEffect(() => {
-    const initialize = async () => {
-      try {
-        loadModels();
-        await ensureDatabase();
-        console.log('✅ Database ready');
-        // Đánh dấu database đã sẵn sàng
-        setIsDatabaseReady(true);
-
-        const listUser = await getAllUser();
-        const messageRepo = new MessageRepository();
-        const allMessages = await messageRepo.findAll();
-        console.log('✅ All messages:', allMessages);
-        console.log('✅ List users:', listUser);
-        if (user) {
-          const userDB = await getUserByAttributes({idDevice: user?.idDevice});
-          if (!userDB) {
-            console.log('Creating new user...');
-            await createUser(user);
-          } else {
-            setUser(userDB);
-          }
-        } else {
-          console.log('Creating new user2...');
-          const res = await createUser({
-            name: 'BLEUser',
-          });
-          console.log('✅ User created:', res);
-          setUser(res);
-        }
-      } catch (error) {
-        console.error('❌ Initialization error:', error);
-      }
-    };
-
-    initialize();
-  }, []);
-
   return (
-    <BluetoothProvider isDatabaseReady={isDatabaseReady}>
+    <BluetoothProvider>
       <TabStackContent />
     </BluetoothProvider>
   );

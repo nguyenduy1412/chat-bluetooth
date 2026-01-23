@@ -25,13 +25,13 @@ const ListMessageScreen = () => {
   const {user} = userStore();
 
   const [searchText, setSearchText] = useState('');
+  const {isEnableBluetooth} = userStore();
 
   const {
     connectTo,
     disconnect,
     devices,
     discovering,
-    isEnabled,
     connectedDevices,
     handleRoomPress,
     rooms,
@@ -147,7 +147,7 @@ const ListMessageScreen = () => {
                   Bluetooth
                 </Text>
                 <Text fontSize={13} color="#888">
-                  {isEnabled
+                  {isEnableBluetooth
                     ? discovering
                       ? 'Đang quét thiết bị xung quanh...'
                       : 'Đã bật & sẵn sàng kết nối'
@@ -159,7 +159,7 @@ const ListMessageScreen = () => {
                 thumbColor={'#fff'}
                 ios_backgroundColor="#e0e0e0"
                 onValueChange={handleToggleBluetooth}
-                value={isEnabled}
+                value={isEnableBluetooth}
               />
             </Box>
 
