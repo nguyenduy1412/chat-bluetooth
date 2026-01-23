@@ -1,4 +1,12 @@
-import {Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, Generated} from 'typeorm';
+import {
+  Entity,
+  PrimaryColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToMany,
+  Generated,
+} from 'typeorm';
 import {MessageEntity} from './MessageEntity';
 
 @Entity('user')
@@ -38,6 +46,11 @@ export class User {
 
   @Column({type: 'varchar', nullable: true})
   deviceAddress?: string;
+
+  @Column({type: 'int', nullable: true})
+  otp?: number;
+  @Column({type: 'datetime', nullable: true})
+  expiredOtp?: Date;
 
   @OneToMany(() => MessageEntity, message => message.createdBy)
   messages?: MessageEntity[];

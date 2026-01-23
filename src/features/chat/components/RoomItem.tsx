@@ -7,6 +7,7 @@ import {Text} from '@/components/common/Text/Text';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/vi';
+import {AI_3, AVATAR} from '@/assets/images';
 
 // Config dayjs
 dayjs.extend(relativeTime);
@@ -24,7 +25,7 @@ interface RoomItemProps {
     type?: string;
     createdAt?: Date;
   } | null;
-  updatedAt?: Date;
+  updatedAt?: Date | null;
   isAI?: boolean;
   onPress: () => void;
   isScanned?: boolean;
@@ -48,12 +49,12 @@ export const RoomItem = ({
   // Logic hiển thị ảnh
   const getAvatarSource = () => {
     if (isAI) {
-      return AI_AVATAR;
+      return AI_3;
     }
     if (avatar && avatar.length > 10) {
       return {uri: avatar};
     }
-    return DEFAULT_AVATAR;
+    return AVATAR;
   };
 
   // Logic hiển thị tin nhắn cuối

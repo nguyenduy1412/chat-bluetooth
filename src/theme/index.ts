@@ -1,6 +1,6 @@
-import { DarkTheme, DefaultTheme } from '@react-navigation/native';
+import {DarkTheme, DefaultTheme} from '@react-navigation/native';
 import button from '@/theme/button';
-import { colors } from '@/theme/colors';
+import {colors} from '@/theme/colors';
 
 export const lightColors = {
   primary: colors.skyBlue,
@@ -11,7 +11,7 @@ export const lightColors = {
   secondaryVariant: colors.darkGreen[50],
 
   // background
-  background: colors.white,
+  background: '#f1f3f5',
   secondaryBackground: colors.grey[10],
   surface: colors.grey[50],
   error: colors.red,
@@ -38,7 +38,7 @@ export const lightColors = {
   searchBackground: colors.grayScale[10], // Cho search input background
   cardBackground: colors.white,
   buttonSecondary: colors.grayScale[20],
-  
+
   bottomTab: colors.grayScale[40],
   activeBottomTab: colors.skyBlue,
   online: colors.lightGreen[50],
@@ -90,7 +90,7 @@ export const darkColors: ColorType = {
   placeholder: colors.greyDarker,
   borderLight: colors.grayScale[20],
 
-  // UI Components  
+  // UI Components
   searchBackground: colors.grayScale[20], // Dark theme search background
   cardBackground: colors.grayScale[10],
   buttonSecondary: colors.grayScale[30],

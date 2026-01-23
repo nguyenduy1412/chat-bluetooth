@@ -6,16 +6,16 @@ import {useTheme} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {goBack} from '@/utils/navigationUtils';
 import {Image} from 'react-native';
-import {AI_3} from '@/assets/images';
+import {AI_3, AVATAR} from '@/assets/images';
 import LinearGradient from 'react-native-linear-gradient';
 
 type Props = {
   avatar?: string;
   name?: string;
-  type?: string;
+  type?: 'user' | 'ai';
   onSearch?: () => void;
 };
-const HeaderChat = ({avatar, name, onSearch}: Props) => {
+const HeaderChat = ({avatar, name, onSearch, type = 'user'}: Props) => {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -29,17 +29,23 @@ const HeaderChat = ({avatar, name, onSearch}: Props) => {
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-      <Box flexDirection='row' alignItems='center' gap={10}>
+      <Box flexDirection="row" alignItems="center" gap={10}>
         <Box onPress={goBack}>
           <ChevronLeft color={colors.background} />
         </Box>
         <Box>
           <Image
-            source={AI_3}
+            source={
+              avatar && avatar.length > 10
+                ? {uri: avatar}
+                : type === 'ai'
+                ? AI_3
+                : AVATAR
+            }
             style={{width: 40, height: 40, borderRadius: 999}}
           />
         </Box>
-        <Box >
+        <Box>
           <Text fontSize={20} color={colors.background}>
             {name}
           </Text>

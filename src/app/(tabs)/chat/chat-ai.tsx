@@ -38,15 +38,15 @@ const ChatAIScreen = () => {
   const [streamingMessage, setStreamingMessage] =
     useState<MessageEntity | null>(null);
   const currentAiMessageIdRef = useRef<string | null>(null);
-  
+
   const [isTyping, setIsTyping] = useState(false);
-  
+
   // Search states
   const [showSearch, setShowSearch] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [searchResults, setSearchResults] = useState<string[]>([]);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
-  
+
   useEffect(() => {
     if (dbMessages && dbMessages.length > 0) {
       setMessages(dbMessages);
@@ -55,9 +55,9 @@ const ChatAIScreen = () => {
 
   useEffect(() => {
     const shouldBeTyping = isGenerating && !streamingMessage;
-    setIsTyping(prev => prev !== shouldBeTyping ? shouldBeTyping : prev);
-  }, [isGenerating, streamingMessage])
-  
+    setIsTyping(prev => (prev !== shouldBeTyping ? shouldBeTyping : prev));
+  }, [isGenerating, streamingMessage]);
+
   // Search logic
   useEffect(() => {
     if (searchText.trim().length === 0) {
@@ -236,7 +236,7 @@ const ChatAIScreen = () => {
   const handleSearchPrevious = useCallback(() => {
     if (searchResults.length > 0) {
       setCurrentSearchIndex(prev =>
-        prev > 0 ? prev - 1 : searchResults.length - 1
+        prev > 0 ? prev - 1 : searchResults.length - 1,
       );
     }
   }, [searchResults]);
@@ -244,50 +244,48 @@ const ChatAIScreen = () => {
   const handleSearchNext = useCallback(() => {
     if (searchResults.length > 0) {
       setCurrentSearchIndex(prev =>
-        prev < searchResults.length - 1 ? prev + 1 : 0
+        prev < searchResults.length - 1 ? prev + 1 : 0,
       );
     }
   }, [searchResults]);
 
   const currentHighlightedMessageId = useMemo(() => {
-    return searchResults.length > 0 ? searchResults[currentSearchIndex] : undefined;
+    return searchResults.length > 0
+      ? searchResults[currentSearchIndex]
+      : undefined;
   }, [searchResults, currentSearchIndex]);
 
   const handleDeleteMessage = useCallback(
     async (messageId: string) => {
-      Alert.alert(
-        'Xóa tin nhắn',
-        'Bạn có chắc chắn muốn xóa tin nhắn này?',
-        [
-          {
-            text: 'Hủy',
-            style: 'cancel',
+      Alert.alert('Xóa tin nhắn', 'Bạn có chắc chắn muốn xóa tin nhắn này?', [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Xóa từ database
+              await deleteMessage(messageId);
+              // Xóa khỏi state local
+              setMessages(prev => prev.filter(msg => msg.id !== messageId));
+            } catch (error) {
+              console.error('Failed to delete message:', error);
+              Alert.alert('Lỗi', 'Không thể xóa tin nhắn');
+            }
           },
-          {
-            text: 'Xóa',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                // Xóa từ database
-                await deleteMessage(messageId);
-                // Xóa khỏi state local
-                setMessages(prev => prev.filter(msg => msg.id !== messageId));
-              } catch (error) {
-                console.error('Failed to delete message:', error);
-                Alert.alert('Lỗi', 'Không thể xóa tin nhắn');
-              }
-            },
-          },
-        ],
-      );
+        },
+      ]);
     },
     [deleteMessage],
   );
   return (
     <Box flex={1} backgroundColor={colors.white}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
-      <HeaderChat name="AI" onSearch={handleSearch} />
-      
+      <HeaderChat name="AI" onSearch={handleSearch} type="ai" />
+
       <SearchBar
         visible={showSearch}
         searchText={searchText}
@@ -298,7 +296,7 @@ const ChatAIScreen = () => {
         onPrevious={handleSearchPrevious}
         onNext={handleSearchNext}
       />
-      
+
       <CustomChatView
         messages={streamingMessage ? [streamingMessage, ...messages] : messages}
         currentUserId={user?.id || 'me'}

@@ -27,7 +27,6 @@ type UseBluetoothOptions = {
 export const useBluetooth = (options: UseBluetoothOptions = {}) => {
   const {isDatabaseReady = false} = options;
 
-
   const [discovering, setDiscovering] = useState(false);
   const [devices, setDevices] = useState<BluetoothDevice[]>([]);
   const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>(
@@ -40,7 +39,7 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
   const {mutateAsync: createRoom} = useCreateRoom();
   const roomInfoRef = useRef<{[deviceAddress: string]: RoomInfo}>({});
   const imageChunksRef = useRef<{[key: string]: ImageChunk}>({});
-  const {isEnableBluetooth,setIsEnableBluetooth} = userStore();
+  const {isEnableBluetooth, setIsEnableBluetooth} = userStore();
 
   const {
     data: rooms = [],
@@ -260,9 +259,14 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
 
   const handleUserInfo = async (sender: User, senderAddress: string) => {
     try {
-      if (!user?.id || !sender?.id) return;
-
-      await updateDeviceAddress(sender?.deviceAddress || '');
+      if (
+        !user?.id ||
+        !sender?.id ||
+        !sender?.deviceAddress ||
+        sender?.deviceAddress === ''
+      )
+        return;
+      await updateDeviceAddress(sender.deviceAddress);
       const room = await getRoomByMember(user.id, sender.id);
 
       sender.deviceAddress = senderAddress;
@@ -369,6 +373,21 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
       delete imageChunksRef.current[messageId];
     }
   };
+  const handleUserUpdate = async (sender: User) => {
+    if (!sender?.id) return;
+    try {
+      await updateUser({
+        id: sender.id,
+        data: {
+          name: sender.name,
+          image: sender.image,
+        },
+      });
+      return;
+    } catch (error) {
+      console.error('❌ Error handling user update:', error);
+    }
+  };
   const handleMessageReceived = async (data: any) => {
     const {message, deviceAddress} = data;
     try {
@@ -381,6 +400,10 @@ export const useBluetooth = (options: UseBluetoothOptions = {}) => {
 
       if (jsonData.type === 'ROOM_INFO') {
         await handleRoomInfo(jsonData.room, jsonData.user, deviceAddress);
+        return;
+      }
+      if (jsonData.type === 'USER_UPDATE') {
+        await handleUserUpdate(jsonData.user);
         return;
       }
 

@@ -36,8 +36,8 @@ const ModelScreen = () => {
 
   const handleDownload = (item: Model) => {
     const status = getModelStatus(item.name);
-    if(status){
-      setActiveModel(item.name)
+    if (status) {
+      setActiveModel(item.name);
       return;
     }
     setDownloadingModel(item.name);
@@ -137,7 +137,7 @@ const ModelScreen = () => {
   };
 
   return (
-    <Box flex={1} px={20}>
+    <Box flex={1} px={20} backgroundColor={colors.background}>
       <ScreenHeader title="Mô hình" mt={top} isShowBackButton={true} />
       <Box mb={10}>
         <Text fontSize={16} fontWeight="bold">

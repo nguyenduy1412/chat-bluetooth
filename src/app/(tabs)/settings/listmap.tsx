@@ -100,7 +100,7 @@ const provinces: Province[] = [
     name: 'Nam Định',
     bounds: [
       [105.95, 20.15],
-      [106.50, 20.60],
+      [106.5, 20.6],
     ],
   },
   {
@@ -306,7 +306,7 @@ const ListMapScreen: React.FC = () => {
   };
 
   return (
-    <Box flex={1} px={20}>
+    <Box flex={1} px={20} backgroundColor={colors.background}>
       <ScreenHeader title="Bản đồ" mt={top} isShowBackButton={true} />
       <Box mb={10}>
         <Text fontSize={16} fontWeight="medium">

@@ -142,17 +142,30 @@ const ProfileScreen = () => {
             : undefined,
         };
 
-        await updateUser({
+        const userUpdated = await updateUser({
           id: user.id,
           data: updatedData,
         });
 
         // Update local store immediately
-        if (user) {
-          setUser({
-            ...user,
-            ...updatedData,
-          } as User);
+        if (userUpdated) {
+          setUser(userUpdated);
+          const userInfoData = {
+            type: 'USER_UPDATE',
+            user: {
+              id: user.id,
+              name: user.name,
+              image: user.image || '',
+              deviceAddress: '',
+            },
+          };
+          try {
+            await BluetoothModule.sendMessageToAll(
+              JSON.stringify(userInfoData),
+            );
+          } catch (error) {
+            console.error('Error sending user info:', error);
+          }
         }
 
         Alert.alert('Thành công', 'Cập nhật thông tin thành công');
@@ -165,10 +178,9 @@ const ProfileScreen = () => {
   );
 
   return (
-    <Box flex={1} backgroundColor="white" pt={top}>
+    <Box flex={1} backgroundColor="white" pt={top} px={20}>
       <ScreenHeader title="Thông tin cá nhân" />
-      <ScrollView
-        contentContainerStyle={{padding: 20, paddingBottom: bottom + 20}}>
+      <ScrollView contentContainerStyle={{paddingBottom: bottom + 20}}>
         {/* Avatar Section */}
         <Box alignItems="center" mb={30}>
           <TouchableOpacity onPress={onPickImage} activeOpacity={0.8}>

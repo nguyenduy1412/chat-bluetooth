@@ -91,7 +91,7 @@ const ListMessageScreen = () => {
   }, []);
 
   return (
-    <Box flex={1} backgroundColor="#F5F5F5">
+    <Box flex={1} backgroundColor={colors.background}>
       {/* Custom Header with Search */}
       <Box
         backgroundColor="white"
@@ -162,7 +162,15 @@ const ListMessageScreen = () => {
                 value={isEnableBluetooth}
               />
             </Box>
-
+            <Box
+              mb={12}
+              flexDirection="row"
+              justifyContent="space-between"
+              alignItems="center">
+              <Text fontSize={16} fontWeight="bold" color="#333">
+                Tin nhắn
+              </Text>
+            </Box>
             {/* AI Chat Entry */}
             <RoomItem
               name="Trợ lý AI"
@@ -215,23 +223,6 @@ const ListMessageScreen = () => {
                     />
                   );
                 })}
-              </Box>
-            )}
-
-            {/* Devices Section Header - Only show if we have devices locally */}
-            {displayDevices.length > 0 && (
-              <Box
-                mb={12}
-                mt={16}
-                flexDirection="row"
-                justifyContent="space-between"
-                alignItems="center">
-                <Text fontSize={16} fontWeight="bold" color="#333">
-                  Thiết bị gần đây ({displayDevices.length})
-                </Text>
-                {discovering && (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                )}
               </Box>
             )}
           </Box>

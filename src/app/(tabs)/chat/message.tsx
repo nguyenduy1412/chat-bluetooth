@@ -58,7 +58,6 @@ const MessageScreen = () => {
     route?.params?.roomId,
   );
 
-
   const handleSendMessage = async (text: string) => {
     console.log('Sending message:', text, connectedDevices);
     const trimmedText = text.trim();
@@ -275,6 +274,7 @@ const MessageScreen = () => {
       <HeaderChat
         name={formatName(route.params.receiver?.name)}
         onSearch={handleSearch}
+        avatar={route.params.receiver?.image}
       />
 
       <SearchBar

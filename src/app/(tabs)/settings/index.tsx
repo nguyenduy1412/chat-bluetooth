@@ -1,7 +1,7 @@
-import {Alert, Dimensions, StyleSheet} from 'react-native';
+import {Dimensions, StyleSheet} from 'react-native';
 import {Box} from '../../../components/common/Layout/Box';
 import {Text} from '../../../components/common/Text/Text';
-import {useRef} from 'react';
+import {useRef, useState} from 'react';
 import LottieView from 'lottie-react-native';
 import {
   LOGOUT_ICON,
@@ -14,13 +14,10 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import BlueShimmerBar from '../../../features/settings/components/BlueShimmerBar';
 import {navigate} from '../../../utils/navigationUtils';
 import {ItemSetting} from '../../../features/settings/types';
-import ScreenHeader from '../../../components/header/ScreenHeader';
-import {
-  confirmPlatformPayPayment,
-  PlatformPay,
-} from '@stripe/stripe-react-native';
-import {STRIPE_PUBLISHABLE_KEY, SUPABASE_FUNCTIONS, SUPABASE_ANON_KEY} from '@/constant';
+import PaymentModal from '@/features/settings/components/PaymentModal';
+
 const width = Dimensions.get('window').width - 60;
+
 const renderItem = ({item}: {item: ItemSetting}) => {
   const animation = useRef<LottieView>(null);
   return (
@@ -87,87 +84,30 @@ const data: ItemSetting[] = [
   },
   {
     id: '4',
-    title: 'Đăng xuất',
+    title: 'Đồng bộ dữ liệu',
     icon: LOGOUT_ICON,
     size: 70,
   },
 ];
+
 const SettingsScreen = () => {
-  const {top, bottom} = useSafeAreaInsets();
-  const fetchPaymentIntentClientSecret = async () => {
-    console.log('🔑 Client Publishable Key:', STRIPE_PUBLISHABLE_KEY);
-    console.log('📞 Calling Supabase Edge Function...');
-    
-    const response = await fetch(
-      SUPABASE_FUNCTIONS.CREATE_PAYMENT_INTENT,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          amount: 50000,
-          currency: 'vnd',
-        }),
-      },
-    );
-    console.log('Response status:', response.status);
-    
-    const data = await response.json();
-    console.log('📦 Supabase response:', data);
-    
-    if (data.error) {
-      throw new Error(data.error);
-    }
+  const {top} = useSafeAreaInsets();
+  const [showPayment, setShowPayment] = useState(false);
 
-    return data.clientSecret;
-  };
-  const pay = async () => {
-    try {
-      const clientSecret = await fetchPaymentIntentClientSecret();
-      console.log('Client Secret:', clientSecret);
-      
-      if (!clientSecret) {
-        Alert.alert('Error', 'Failed to get payment intent');
-        return;
-      }
-
-      const {error, paymentIntent} = await confirmPlatformPayPayment(
-        clientSecret,
-        {
-          googlePay: {
-            testEnv: true,
-            merchantName: 'Kaizer',
-            merchantCountryCode: 'VN',
-            currencyCode: 'VND',
-            billingAddressConfig: {
-              format: PlatformPay.BillingAddressFormat.Full,
-              isPhoneNumberRequired: true,
-              isRequired: true,
-            },
-          },
-        },
-      );
-
-      if (error) {
-        console.error('Payment error:', error);
-        Alert.alert(error.code, error.message);
-        return;
-      }
-      
-      Alert.alert('Success', 'The payment was confirmed successfully.');
-      console.log(JSON.stringify(paymentIntent, null, 2));
-    } catch (err:any) {
-      console.error('Payment failed:', err);
-      Alert.alert('Error', err.message || 'Payment failed');
-    }
-  };
   return (
-    <Box px={20} pt={top}>
-      <ScreenHeader title="Cài đặt" isShowBackButton={false} />
-      <Box gap={15} backgroundColor={colors.white} borderRadius={25} p={10}>
+    <Box px={20} pt={top} backgroundColor={colors.background} flex={1}>
+      <Box
+        gap={15}
+        backgroundColor={colors.white}
+        borderRadius={24}
+        p={10}
+        py={20}
+        style={{
+          elevation: 0,
+        }}>
+        <Text fontSize={25} fontWeight="bold" color={'#2563eb'}>
+          {'Cài đặt'.toUpperCase()}
+        </Text>
         {data.map(item => renderItem({item}))}
         <Box
           backgroundColor={'red'}
@@ -175,11 +115,23 @@ const SettingsScreen = () => {
           h={100}
           alignItems="center"
           justifyContent="center"
-          onPress={pay}>
+          onPress={() => setShowPayment(true)}>
           <Text fontSize={16} fontWeight="bold" color={'black'}>
             Pay
           </Text>
         </Box>
+        <PaymentModal
+          visible={showPayment}
+          onClose={() => setShowPayment(false)}
+          onPaymentSuccess={() => {
+            console.log('Payment successful!');
+            // Xử lý sau khi thanh toán thành công
+          }}
+          onPaymentError={error => {
+            console.log('Payment error:', error);
+            // Xử lý khi thanh toán lỗi
+          }}
+        />
       </Box>
     </Box>
   );
