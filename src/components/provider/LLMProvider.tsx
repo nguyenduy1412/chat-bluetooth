@@ -1,8 +1,11 @@
-import React, {createContext, useContext, useEffect, useState, useRef} from 'react';
-import {
-  useLLM,
-  LLAMA3_2_1B_SPINQUANT,
-} from 'react-native-executorch';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useRef,
+} from 'react';
+import {useLLM, LLAMA3_2_1B_SPINQUANT} from 'react-native-executorch';
 
 const LLMContext = createContext<any | null>(null);
 
@@ -14,10 +17,10 @@ export const LLMProvider = ({children}: {children: React.ReactNode}) => {
   const hasInitialized = useRef(false);
 
   console.log('🚀 LLMProvider using fixed model:', SELECTED_MODEL);
-  // const llm = useLLM({model: SELECTED_MODEL});
-  const llm = {
-    isReady:false
-  };
+  const llm = useLLM({model: SELECTED_MODEL});
+  // const llm = {
+  //   isReady:false
+  // };
   // console.log('🚀 LLMProvider rendered, LLM isReady:', llm.isReady);
 
   useEffect(() => {
@@ -32,7 +35,9 @@ export const LLMProvider = ({children}: {children: React.ReactNode}) => {
   // Nếu chưa initialized, return null context để tránh lỗi
   const contextValue = isInitialized ? llm : null;
 
-  return <LLMContext.Provider value={contextValue}>{children}</LLMContext.Provider>;
+  return (
+    <LLMContext.Provider value={contextValue}>{children}</LLMContext.Provider>
+  );
 };
 
 export const useLLMContext = () => {

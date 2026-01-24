@@ -8,6 +8,7 @@ import HomeScreen from '.';
 import {AnimatedTabBar} from '../../components/navigation/AnimatedTabBar';
 import {
   CHAT_ICON,
+  GLOBE_ICON,
   HOME_ICON,
   SETTINGS_ICON,
   UPLOAD_ICON,
@@ -281,8 +282,12 @@ function TabStackContent() {
             <Lottie
               ref={ref}
               loop={false}
-              source={UPLOAD_ICON}
-              style={styles.icon}
+              speed={4}
+              source={GLOBE_ICON}
+              style={{
+                width: 50,
+                height: 50,
+              }}
             />
           ),
           headerShown: false,

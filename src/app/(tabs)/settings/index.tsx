@@ -225,7 +225,7 @@ const SettingsScreen = () => {
       id: '4',
       title: 'Sao lưu & Khôi phục',
       icon: UPLOAD_ICON,
-      size: 70,
+      size: 100,
       onPress: () => {
         navigate('SettingStack', {
           screen: 'Sync',
@@ -252,15 +252,15 @@ const SettingsScreen = () => {
           <RenderItem key={item.id} item={item} isSyncing={isSyncing} />
         ))}
         <Box
-          backgroundColor={'red'}
+          backgroundColor={'white'}
           w={100}
           h={100}
           alignItems="center"
           justifyContent="center"
           onPress={() => setShowPayment(true)}>
-          <Text fontSize={16} fontWeight="bold" color={'black'}>
+          {/* <Text fontSize={16} fontWeight="bold" color={'black'}>
             Pay
-          </Text>
+          </Text> */}
         </Box>
         <PaymentModal
           visible={showPayment}

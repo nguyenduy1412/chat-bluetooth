@@ -9,3 +9,4 @@ export const ROBOT_ICON = require('./robot.json');
 export const MAP_ICON = require('./map.json');
 export const PROFILE_ICON = require('./profile.json');
 export const LOGOUT_ICON = require('./logout.json');
+export const GLOBE_ICON = require('./globe.icon.json');
